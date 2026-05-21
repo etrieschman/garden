@@ -1,0 +1,69 @@
+from datetime import datetime
+from typing import Protocol
+from uuid import UUID
+
+from garden.domain import (
+    Event,
+    Location,
+    Observation,
+    Plant,
+    Recommendation,
+    Taxon,
+)
+
+
+class Storage(Protocol):
+    """Persistence boundary. Implementations may be SQLite, Postgres, JSON, REST, etc.
+
+    All methods take/return Pydantic domain types — no ORM types leak across.
+    """
+
+    # ---- lifecycle ----
+    def init_schema(self) -> None: ...
+
+    # ---- taxa ----
+    def upsert_taxon(self, taxon: Taxon) -> Taxon: ...
+    def get_taxon(self, taxon_id: str) -> Taxon | None: ...
+    def find_taxon(self, query: str) -> list[Taxon]: ...
+    def list_taxa(self) -> list[Taxon]: ...
+
+    # ---- locations ----
+    def upsert_location(self, location: Location) -> Location: ...
+    def get_location(self, location_id: str) -> Location | None: ...
+    def list_locations(self) -> list[Location]: ...
+
+    # ---- plants ----
+    def create_plant(self, plant: Plant) -> Plant: ...
+    def update_plant(self, plant: Plant) -> Plant: ...
+    def get_plant(self, plant_id: str) -> Plant | None: ...
+    def find_plants(self, query: str) -> list[Plant]: ...
+    def list_plants(self, location_id: str | None = None) -> list[Plant]: ...
+
+    # ---- events ----
+    def create_event(self, event: Event) -> Event: ...
+    def list_events(
+        self,
+        plant_id: str | None = None,
+        location_id: str | None = None,
+        since: datetime | None = None,
+    ) -> list[Event]: ...
+
+    # ---- observations ----
+    def create_observation(self, observation: Observation) -> Observation: ...
+    def list_observations(
+        self,
+        metric: str | None = None,
+        plant_id: str | None = None,
+        location_id: str | None = None,
+        since: datetime | None = None,
+    ) -> list[Observation]: ...
+
+    # ---- recommendations ----
+    def create_recommendation(self, rec: Recommendation) -> Recommendation: ...
+    def list_recommendations(
+        self,
+        plant_id: str | None = None,
+        location_id: str | None = None,
+        include_dismissed: bool = False,
+    ) -> list[Recommendation]: ...
+    def dismiss_recommendation(self, rec_id: UUID) -> None: ...

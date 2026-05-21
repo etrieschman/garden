@@ -1,0 +1,20 @@
+name: Erich's Garden
+default_lat: 42.37360754570248
+default_lon: -71.10338051500713
+timezone: America/New_York
+db_path: data/garden.sqlite
+beds:
+- id: patio-north
+  name: patio-north
+  kind: raised_bed
+  lat: 42.37360754570248
+  lon: -71.10338051500713
+  dimensions:
+    length_cm: 240
+    width_cm: 120
+    depth_cm: 30
+  substrate:
+    medium: Coast of Maine raised bed mix
+    components: []
+    amendments: []
+aliases: {}
