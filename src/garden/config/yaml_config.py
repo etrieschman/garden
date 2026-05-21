@@ -31,7 +31,6 @@ class GardenConfig(BaseModel):
     default_lat: float | None = None
     default_lon: float | None = None
     timezone: str = "America/New_York"
-    db_path: str = "data/garden.sqlite"
     beds: list[BedConfig] = Field(default_factory=list)
     aliases: dict[str, str] = Field(default_factory=dict)  # short → plant id
 
@@ -42,16 +41,18 @@ class GardenConfig(BaseModel):
         return None
 
 
-def load_config(path: str | Path = "config/garden.yaml") -> GardenConfig:
+def load_config(path: str | Path) -> GardenConfig:
     p = Path(path)
     if not p.exists():
         return GardenConfig()
     with p.open() as f:
         data = yaml.safe_load(f) or {}
+    # Drop legacy fields that have moved out of the yaml schema.
+    data.pop("db_path", None)
     return GardenConfig.model_validate(data)
 
 
-def save_config(cfg: GardenConfig, path: str | Path = "config/garden.yaml") -> None:
+def save_config(cfg: GardenConfig, path: str | Path) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w") as f:

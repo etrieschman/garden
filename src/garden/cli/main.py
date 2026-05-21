@@ -4,18 +4,23 @@ Conventions:
 - Verbs ride at the top level: `garden water gem`, `garden harvest gem`.
 - `garden log <verb>` is also accepted for the long form.
 - `--strict` (or env `GARDEN_STRICT=1`) disables fuzzy/inferred behavior.
+
+Instance discovery: GARDEN_HOME env, then `./garden-data/` walking up from cwd
+to repo root, then `~/.config/garden/`. Run `garden init` to scaffold one.
 """
 
 from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from garden import instance
 from garden.app import GardenApp
 from garden.config.yaml_config import BedConfig
 from garden.domain import EventType, LocationKind, PlantStatus
@@ -39,7 +44,36 @@ def _strict() -> bool:
 
 
 def _app() -> GardenApp:
-    return GardenApp.from_config()
+    try:
+        return GardenApp.open()
+    except instance.InstanceNotFoundError as e:
+        console.print(f"[red]✗[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+
+@app.command("init")
+def cmd_init(
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Directory to scaffold (defaults to ./garden-data)."),
+    ] = None,
+) -> None:
+    """Create a fresh garden instance (config + empty database)."""
+    target = (path or Path.cwd() / instance.INSTANCE_DIR_NAME).expanduser().resolve()
+    try:
+        created = instance.init_instance(target)
+    except FileExistsError as e:
+        console.print(f"[yellow]![/yellow] {e}")
+        raise typer.Exit(code=1) from e
+    console.print(f"[green]✓[/green] Scaffolded instance at [bold]{created}[/bold]")
+    console.print(
+        f"  edit [bold]{created / instance.CONFIG_FILENAME}[/bold] "
+        "to set your garden name, lat/lon"
+    )
+    if not os.environ.get("GARDEN_HOME") and created != Path.cwd() / instance.INSTANCE_DIR_NAME:
+        console.print(
+            f"  set [bold]GARDEN_HOME={created}[/bold] so the CLI finds it from anywhere"
+        )
 
 
 # ---------- bed ----------

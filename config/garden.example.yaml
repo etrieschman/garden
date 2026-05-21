@@ -1,0 +1,7 @@
+name: My Garden
+default_lat: 0.0           # set to your garden's lat/lon
+default_lon: 0.0
+timezone: America/New_York # IANA timezone for your garden
+
+beds: []     # filled in by `garden bed add` (or edit by hand)
+aliases: {}  # short-name -> plant-id; populated as you create plants

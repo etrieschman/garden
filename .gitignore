@@ -10,10 +10,13 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Data — never commit DBs or cached API responses
-data/*.sqlite
-data/*.sqlite-journal
-data/cache/
+# SQLite write-ahead-log; the .sqlite itself IS committed in garden-data/
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Cached API responses (regeneratable)
+garden-data/cache/
 
 # Environment
 .env

@@ -2,7 +2,6 @@ name: Erich's Garden
 default_lat: 42.37360754570248
 default_lon: -71.10338051500713
 timezone: America/New_York
-db_path: data/garden.sqlite
 beds:
 - id: patio-north
   name: patio-north
