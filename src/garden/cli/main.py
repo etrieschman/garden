@@ -1,8 +1,9 @@
 """Garden CLI entry point.
 
 Conventions:
-- Verbs ride at the top level: `garden water gem`, `garden harvest gem`.
-- `garden log <verb>` is also accepted for the long form.
+- `garden log <verb> <plant> [options]` — all event verbs go through here.
+  The verbs and their --flags are auto-generated from `domain.details.EVENT_DETAILS`,
+  so adding a new event type = add a Pydantic model, no CLI change required.
 - `--strict` (or env `GARDEN_STRICT=1`) disables fuzzy/inferred behavior.
 
 Instance discovery: GARDEN_HOME env, then `./garden-data/` walking up from cwd
@@ -11,12 +12,15 @@ to repo root, then `~/.config/garden/`. Run `garden init` to scaffold one.
 
 from __future__ import annotations
 
+import inspect
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
+from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
 
@@ -24,6 +28,7 @@ from garden import instance
 from garden.app import GardenApp
 from garden.config.yaml_config import BedConfig
 from garden.domain import EventType, LocationKind, PlantStatus
+from garden.domain.details import EVENT_DETAILS
 from garden.services import insights, logging, recommend, setup
 
 app = typer.Typer(
@@ -186,72 +191,80 @@ def plant_add(
     )
 
 
-# ---------- log (the common verbs as top-level shortcuts) ----------
+# ---------- log: registry-driven dispatch ----------
+#
+# Every event type in EVENT_DETAILS becomes a `garden log <type>` subcommand.
+# Adding a new event = add a Pydantic model + register it in domain/details.py.
+# This block is the *only* CLI code that knows about event-detail schemas.
 
 
-def _log_simple(
-    type: EventType, plant: str, details: dict | None = None, notes: str | None = None
-) -> None:
-    ga = _app()
-    e = logging.log_event(
-        ga.storage, plant_query=plant, type=type, details=details or {}, notes=notes
-    )
-    console.print(
-        f"[green]✓[/green] Logged {type.value} for [bold]{e.plant_id}[/bold] "
-        f"at {e.occurred_at:%Y-%m-%d %H:%M}"
-    )
+def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callable[..., None]:
+    """Build a Typer-compatible callable for `garden log <event_type>`.
+
+    Common params (plant, --when, --notes) plus one --flag per field on the
+    detail model. The function validates inputs through the Pydantic model
+    before forwarding to the logging service.
+    """
+
+    def _impl(**kwargs: Any) -> None:
+        plant = kwargs.pop("plant")
+        when = kwargs.pop("when", None)
+        notes = kwargs.pop("notes", None)
+        # whatever's left are the model's fields
+        details_raw = {k: v for k, v in kwargs.items() if v is not None}
+        details = model.model_validate(details_raw).model_dump(exclude_none=True)
+        occurred = datetime.fromisoformat(when) if when else None
+        ga = _app()
+        e = logging.log_event(
+            ga.storage,
+            plant_query=plant,
+            type=event_type,
+            occurred_at=occurred,
+            details=details,
+            notes=notes,
+        )
+        suffix = f"  {details}" if details else ""
+        console.print(
+            f"[green]✓[/green] Logged {event_type.value} for [bold]{e.plant_id}[/bold] "
+            f"at {e.occurred_at:%Y-%m-%d %H:%M}{suffix}"
+        )
+
+    params: list[inspect.Parameter] = [
+        inspect.Parameter("plant", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=str),
+        inspect.Parameter(
+            "when",
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=typer.Option(None, help="ISO timestamp; defaults to now."),
+            annotation=str | None,
+        ),
+        inspect.Parameter(
+            "notes",
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=typer.Option(None, "--notes", "-n", help="Free-form note."),
+            annotation=str | None,
+        ),
+    ]
+    for fname, finfo in model.model_fields.items():
+        params.append(
+            inspect.Parameter(
+                fname,
+                kind=inspect.Parameter.KEYWORD_ONLY,
+                default=typer.Option(None, help=finfo.description or ""),
+                annotation=finfo.annotation,
+            )
+        )
+
+    _impl.__signature__ = inspect.Signature(params)  # type: ignore[attr-defined]
+    _impl.__name__ = f"log_{event_type.value}"
+    _impl.__doc__ = (model.__doc__ or "").strip() or f"Log a {event_type.value} event."
+    return _impl
 
 
-@app.command("water")
-def water(
-    plant: str,
-    amount_l: Annotated[float | None, typer.Option("--amount", "--amount-l", help="Liters.")] = None,
-    notes: Annotated[str | None, typer.Option("--notes", "-n")] = None,
-) -> None:
-    """Log a watering."""
-    details = {"amount_l": amount_l} if amount_l is not None else {}
-    _log_simple(EventType.WATERED, plant, details, notes)
+for _event_type, _model in EVENT_DETAILS.items():
+    log_app.command(_event_type.value)(_build_log_command(_event_type, _model))
 
 
-@app.command("fertilize")
-def fertilize(
-    plant: str,
-    product: Annotated[str | None, typer.Option("--with", help="Fertilizer/product name.")] = None,
-    notes: Annotated[str | None, typer.Option("--notes", "-n")] = None,
-) -> None:
-    """Log a fertilization."""
-    details = {"product": product} if product else {}
-    _log_simple(EventType.FERTILIZED, plant, details, notes)
-
-
-@app.command("harvest")
-def harvest(
-    plant: str,
-    weight_g: Annotated[float | None, typer.Option("--weight", "--weight-g", help="Grams.")] = None,
-    count: Annotated[int | None, typer.Option("--count")] = None,
-    notes: Annotated[str | None, typer.Option("--notes", "-n")] = None,
-) -> None:
-    """Log a harvest."""
-    details: dict = {}
-    if weight_g is not None:
-        details["weight_g"] = weight_g
-    if count is not None:
-        details["count"] = count
-    _log_simple(EventType.HARVESTED, plant, details, notes)
-
-
-@app.command("prune")
-def prune(
-    plant: str,
-    what: Annotated[str | None, typer.Option("--what", help="What was removed.")] = None,
-    notes: Annotated[str | None, typer.Option("--notes", "-n")] = None,
-) -> None:
-    """Log a pruning."""
-    details = {"what": what} if what else {}
-    _log_simple(EventType.PRUNED, plant, details, notes)
-
-
-# ---------- log subcommands (creation verbs) ----------
+# ---------- log: creation verbs (special-cased because they create Plants) ----------
 
 
 @log_app.command("transplant")
