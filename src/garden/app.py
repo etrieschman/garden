@@ -14,6 +14,7 @@ from garden.config import GardenConfig, load_config, save_config
 from garden.providers.catalog import CatalogProvider, LocalCatalog
 from garden.providers.weather import OpenMeteoProvider, WeatherProvider
 from garden.recommendations import RecommendationEngine, RuleEngine
+from garden.services.sync import sync_config_to_storage
 from garden.storage.base import Storage
 from garden.storage.sqlite import SQLiteStorage
 
@@ -38,6 +39,7 @@ class GardenApp:
         cfg = load_config(instance.config_path(inst))
         storage = SQLiteStorage(instance.db_path(inst))
         storage.init_schema()
+        sync_config_to_storage(cfg, storage)
         return cls(
             config=cfg,
             storage=storage,
