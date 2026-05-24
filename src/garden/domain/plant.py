@@ -1,8 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from garden._clock import now as _now
 from garden.domain.enums import PlantStatus
 
 
@@ -15,4 +14,4 @@ class Plant(BaseModel):
     status: PlantStatus = PlantStatus.SEEDED
     planted_at: datetime | None = None
     notes: str | None = None
-    created_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

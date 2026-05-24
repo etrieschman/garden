@@ -1,27 +1,32 @@
 # garden-data/
 
-**This directory holds personal garden data — beds, plants, events, observations.**
-It is committed alongside the code so it syncs across machines via `git pull` /
+**This directory holds your personal garden data as a single SQLite file.**
+It's committed alongside the code so it syncs across machines via `git pull` /
 `git push`. The code in `src/garden/` is generic; this directory is what makes
 the database "your garden."
 
 ## Files
 
-- `garden.yaml` — your beds, aliases, and defaults (lat/lon, garden name).
-  Hand-editable. The CLI also writes to it when you run `garden bed add`.
-- `garden.sqlite` — your event log, observations, plants, taxa.
-  Binary; SQLAlchemy/SQLite reads/writes it. Committed so it syncs.
+- `garden.sqlite` — settings (one row in the `garden` table), beds, plants,
+  events, observations, recommendations. Binary; SQLAlchemy reads/writes it.
+
+That's it. There used to be a `garden.yaml` here too; it's been folded into
+the SQLite. If you upgraded from the old version, `garden.yaml.migrated` may
+be sitting around as a one-time breadcrumb — it's safe to delete.
 
 ## You forked this repo — now what?
 
-You probably want to replace this directory with your own data. Two ways:
+You probably want to replace this database with your own. Two paths:
 
 **1. Start fresh (recommended)**
 
 ```bash
-rm -rf garden-data/
-uv run garden init
-# Edit garden-data/garden.yaml — set name, default_lat, default_lon
+rm garden-data/garden.sqlite
+uv run garden init \
+    --name "My Garden" \
+    --lat 42.3 --lon -71.1 \
+    --timezone America/New_York
+
 uv run garden bed add my-bed --kind raised_bed --dim 240x120x30cm
 ```
 
@@ -29,15 +34,15 @@ uv run garden bed add my-bed --kind raised_bed --dim 240x120x30cm
 
 ```bash
 mv garden-data garden-data.example
-uv run garden init ~/my-garden-data    # or anywhere else
-export GARDEN_HOME=~/my-garden-data    # add to your shell profile
+uv run garden init ~/my-garden-data
+export GARDEN_HOME=~/my-garden-data
 ```
 
 ## Syncing across machines
 
 ```bash
 # After a day of logging on Machine A:
-git -C garden-data status               # changed: garden.sqlite, garden.yaml
+git -C garden-data status
 git add garden-data && git commit -m "logged today's events"
 git push
 
@@ -45,16 +50,11 @@ git push
 git pull
 ```
 
-**Caveat:** `garden.sqlite` is binary. Don't edit on two machines without
-pulling first, or you'll get an unmergeable conflict. If that ever becomes a
-problem, we can add a YAML/JSON export (the storage layer is pluggable).
+**Caveat:** `garden.sqlite` is binary, so concurrent edits across machines
+produce unmergeable conflicts. Commit before switching machines.
 
 ## Privacy
 
-This is a public repo. Anything you put in `garden-data/` is public too. If
-your data ever needs to be private:
-- Move `garden-data/` to a separate **private** repo of your own,
-- Clone it somewhere, and
-- Set `GARDEN_HOME=/path/to/clone` so the CLI finds it.
-
-The code doesn't care where the instance directory lives.
+This is a public repo. Anything in `garden-data/` is public too. If your
+data should be private, move `garden-data/` to a separate private repo and
+set `GARDEN_HOME=/path/to/it`. The code doesn't care where the data lives.

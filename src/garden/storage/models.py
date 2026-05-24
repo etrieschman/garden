@@ -1,13 +1,12 @@
 """SQLAlchemy ORM models. Internal to the SQLite adapter — do not import outside `storage/`."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from garden._clock import now as _now
 from garden.domain import (
     Dimensions,
     Event,
@@ -25,6 +24,20 @@ from garden.domain import (
 
 class Base(DeclarativeBase):
     pass
+
+
+class GardenRow(Base):
+    """Single-row table holding garden-wide settings.
+
+    Always lives at id=1; the storage layer enforces the singleton.
+    """
+
+    __tablename__ = "garden"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    name: Mapped[str] = mapped_column(String, default="My Garden")
+    default_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    default_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    timezone: Mapped[str] = mapped_column(String, default="America/New_York")
 
 
 class TaxonRow(Base):
@@ -73,7 +86,7 @@ class LocationRow(Base):
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
     hardiness_zone: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     def to_domain(self) -> Location:
         return Location(
@@ -115,9 +128,9 @@ class PlantRow(Base):
         ForeignKey("locations.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String)
-    planted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    planted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     def to_domain(self) -> Plant:
         return Plant(
@@ -147,7 +160,7 @@ class EventRow(Base):
     __tablename__ = "events"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     type: Mapped[str] = mapped_column(String, index=True)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     plant_id: Mapped[str | None] = mapped_column(
         ForeignKey("plants.id"), nullable=True, index=True
     )
@@ -199,7 +212,7 @@ class ObservationRow(Base):
     value_numeric: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     unit: Mapped[str | None] = mapped_column(String, nullable=True)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     plant_id: Mapped[str | None] = mapped_column(
         ForeignKey("plants.id"), nullable=True, index=True
     )
@@ -252,10 +265,10 @@ class RecommendationRow(Base):
     reason: Mapped[str] = mapped_column(Text)
     engine: Mapped[str] = mapped_column(String, index=True)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
-    generated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    valid_after: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    valid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     def to_domain(self) -> Recommendation:

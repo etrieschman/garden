@@ -8,7 +8,8 @@ from garden.domain import (
     PlantStatus,
 )
 from garden.providers.catalog import LocalCatalog
-from garden.services import logging, setup
+from garden.services import garden as garden_svc
+from garden.services import logging
 from garden.storage.sqlite import SQLiteStorage
 
 
@@ -16,7 +17,7 @@ def test_transplant_garden_gem_to_raised_bed(storage: SQLiteStorage) -> None:
     catalog = LocalCatalog()
 
     # 1. user creates the raised bed
-    bed = setup.add_location(
+    bed = garden_svc.add_location(
         storage,
         id="patio-north",
         name="Patio raised bed (north)",
@@ -30,11 +31,11 @@ def test_transplant_garden_gem_to_raised_bed(storage: SQLiteStorage) -> None:
     assert bed.dimensions.area_m2 == 2.88
 
     # 2. user runs `garden log transplant "Garden Gem" --to patio-north`
-    taxon = setup.resolve_taxon(storage, catalog, "Garden Gem")
+    taxon = garden_svc.resolve_taxon(storage, catalog, "Garden Gem")
     assert taxon.cultivar == "Garden Gem"
     assert taxon.scientific_name == "Solanum lycopersicum"
 
-    plant = setup.add_plant(
+    plant = garden_svc.add_plant(
         storage, taxon=taxon, location_id=bed.id, status=PlantStatus.TRANSPLANTED
     )
     assert plant.id == "tomato-garden-gem-1"
@@ -62,5 +63,5 @@ def test_transplant_garden_gem_to_raised_bed(storage: SQLiteStorage) -> None:
     assert len(by_location) == 1 and by_location[0].id == event.id
 
     # 5. another transplant of the same taxon gets a unique id
-    plant2 = setup.add_plant(storage, taxon=taxon, location_id=bed.id)
+    plant2 = garden_svc.add_plant(storage, taxon=taxon, location_id=bed.id)
     assert plant2.id == "tomato-garden-gem-2"

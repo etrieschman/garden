@@ -1,9 +1,8 @@
 import math
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, Field
 
-from garden._clock import now as _now
 from garden.domain.enums import LocationKind
 
 
@@ -53,4 +52,4 @@ class Location(BaseModel):
     parent_id: str | None = None
     hardiness_zone: str | None = None
     notes: str | None = None
-    created_at: datetime = Field(default_factory=_now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

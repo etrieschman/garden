@@ -15,6 +15,9 @@ htmlcov/
 *.sqlite-wal
 *.sqlite-shm
 
+# One-time yaml migration breadcrumb (created on first run after the v0.2 refactor)
+*.yaml.migrated
+
 # Cached API responses (regeneratable)
 garden-data/cache/
 

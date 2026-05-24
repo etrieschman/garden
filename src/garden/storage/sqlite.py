@@ -13,9 +13,11 @@ from garden.domain import (
     Recommendation,
     Taxon,
 )
+from garden.settings import GardenMeta
 from garden.storage.models import (
     Base,
     EventRow,
+    GardenRow,
     LocationRow,
     ObservationRow,
     PlantRow,
@@ -36,6 +38,38 @@ class SQLiteStorage:
 
     def init_schema(self) -> None:
         Base.metadata.create_all(self.engine)
+
+    # ---- garden settings ----
+    def get_garden(self) -> GardenMeta:
+        with self.Session() as s:
+            row = s.get(GardenRow, 1)
+            if row is None:
+                return GardenMeta()
+            return GardenMeta(
+                name=row.name,
+                default_lat=row.default_lat,
+                default_lon=row.default_lon,
+                timezone=row.timezone,
+            )
+
+    def save_garden(self, meta: GardenMeta) -> None:
+        with self.Session.begin() as s:
+            row = s.get(GardenRow, 1)
+            if row is None:
+                s.add(
+                    GardenRow(
+                        id=1,
+                        name=meta.name,
+                        default_lat=meta.default_lat,
+                        default_lon=meta.default_lon,
+                        timezone=meta.timezone,
+                    )
+                )
+            else:
+                row.name = meta.name
+                row.default_lat = meta.default_lat
+                row.default_lon = meta.default_lon
+                row.timezone = meta.timezone
 
     # ---- taxa ----
     def upsert_taxon(self, taxon: Taxon) -> Taxon:

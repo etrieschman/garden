@@ -10,6 +10,7 @@ from garden.domain import (
     Recommendation,
     Taxon,
 )
+from garden.settings import GardenMeta
 
 
 class Storage(Protocol):
@@ -20,6 +21,10 @@ class Storage(Protocol):
 
     # ---- lifecycle ----
     def init_schema(self) -> None: ...
+
+    # ---- garden settings (single row) ----
+    def get_garden(self) -> GardenMeta: ...
+    def save_garden(self, meta: GardenMeta) -> None: ...
 
     # ---- taxa ----
     def upsert_taxon(self, taxon: Taxon) -> Taxon: ...

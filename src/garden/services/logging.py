@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from garden.domain import Event, EventType, Observation, PlantStatus
-from garden.services.setup import resolve_plant
+from garden.services.garden import resolve_plant
 from garden.storage.base import Storage
 
 
