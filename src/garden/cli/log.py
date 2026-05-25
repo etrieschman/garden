@@ -22,39 +22,59 @@ from garden.services import garden as garden_svc
 from garden.services import logging
 
 
+def _resolve_target(storage: Any, target: str) -> tuple[str | None, str | None]:
+    """Resolve a positional target to (plant_query, location_id).
+
+    Plants take precedence over beds. Returns one populated and one None so
+    `log_event` can decide whether to attach to a plant or a location.
+    """
+    if storage.get_plant(target) or storage.find_plants(target):
+        return target, None
+    if storage.get_location(target):
+        return None, target
+    raise typer.BadParameter(
+        f"no plant or bed matches {target!r}. "
+        "Use `garden bed list` or `garden list` to see what's available."
+    )
+
+
 def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callable[..., None]:
     """Build a Typer-compatible callable for `garden log <event_type>`.
 
-    Common params (plant, --when, --notes) plus one --flag per field on the
-    detail model. Validates inputs through the Pydantic model before forwarding
-    to the logging service.
+    Common params (target, --when, --notes) plus one --flag per field on the
+    detail model. `target` is a plant id/name or a bed id (auto-detected, plant
+    wins on conflict). Validates inputs through the Pydantic model before
+    forwarding to the logging service.
     """
 
     def _impl(**kwargs: Any) -> None:
-        plant = kwargs.pop("plant")
+        target = kwargs.pop("target")
         when = kwargs.pop("when", None)
         notes = kwargs.pop("notes", None)
         details_raw = {k: v for k, v in kwargs.items() if v is not None}
         details = model.model_validate(details_raw).model_dump(exclude_none=True)
         occurred = datetime.fromisoformat(when) if when else None
         ga = garden_app()
+        plant_query, location_id = _resolve_target(ga.storage, target)
         e = logging.log_event(
             ga.storage,
-            plant_query=plant,
+            plant_query=plant_query,
+            location_id=location_id,
             type=event_type,
             occurred_at=occurred,
             details=details,
             notes=notes,
         )
         suffix = f"  {details}" if details else ""
+        target_label = e.plant_id or e.location_id or target
         console.print(
-            f"[green]✓[/green] Logged {event_type.value} for [bold]{e.plant_id}[/bold] "
+            f"[green]✓[/green] Logged {event_type.value} for [bold]{target_label}[/bold] "
             f"at {e.occurred_at:%Y-%m-%d %H:%M}{suffix}"
         )
 
     params: list[inspect.Parameter] = [
         inspect.Parameter(
-            "plant",
+            "target",
             kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
             annotation=str,
         ),
@@ -153,6 +173,81 @@ def log_transplant(
         f"[green]🪴[/green] Logged transplant of [bold]{plant.id}[/bold] → "
         f"[bold]{to}[/bold] at {e.occurred_at:%Y-%m-%d %H:%M}"
     )
+
+
+# ---------- review / fix mistakes ----------
+
+
+@log_app.command("list")
+def log_list(
+    plant: Annotated[str | None, typer.Option("--plant", help="Filter to one plant.")] = None,
+    bed: Annotated[str | None, typer.Option("--bed", help="Filter to one bed.")] = None,
+    type: Annotated[
+        EventType | None, typer.Option("--type", help="Filter to one event type.")
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Max rows.")] = 20,
+) -> None:
+    """List recent events (with short ids for `garden log delete`)."""
+    from rich.table import Table
+
+    ga = garden_app()
+    events = ga.storage.list_events(plant_id=plant, location_id=bed)
+    if type is not None:
+        events = [e for e in events if e.type == type]
+    events = events[:limit]
+    if not events:
+        console.print("[dim]no events match[/dim]")
+        return
+    t = Table(title=f"Events (latest {len(events)})")
+    t.add_column("id")
+    t.add_column("when")
+    t.add_column("type")
+    t.add_column("target")
+    t.add_column("details")
+    t.add_column("notes")
+    for e in events:
+        target_label = e.plant_id or e.location_id or "—"
+        details = ", ".join(f"{k}={v}" for k, v in (e.details or {}).items())
+        t.add_row(
+            str(e.id)[:8],
+            e.occurred_at.strftime("%Y-%m-%d %H:%M"),
+            e.type.value,
+            target_label,
+            details,
+            (e.notes or "")[:40],
+        )
+    console.print(t)
+
+
+@log_app.command("delete")
+def log_delete(
+    id_prefix: Annotated[
+        str, typer.Argument(help="Event id or unique prefix (from `garden log list`).")
+    ],
+    yes: Annotated[bool, typer.Option("-y", "--yes", help="Skip confirmation.")] = False,
+) -> None:
+    """Delete an event. Find its id with `garden log list`."""
+    ga = garden_app()
+    matches = ga.storage.find_events_by_prefix(id_prefix)
+    if not matches:
+        console.print(f"[red]✗[/red] no event matches {id_prefix!r}")
+        raise typer.Exit(code=1)
+    if len(matches) > 1:
+        console.print(
+            f"[yellow]![/yellow] {id_prefix!r} is ambiguous ({len(matches)} matches). "
+            "Use more characters of the id."
+        )
+        raise typer.Exit(code=1)
+    event = matches[0]
+    target_label = event.plant_id or event.location_id or "—"
+    console.print(
+        f"About to delete: [bold]{event.type.value}[/bold] on [bold]{target_label}[/bold] "
+        f"at {event.occurred_at:%Y-%m-%d %H:%M}"
+    )
+    if not yes and not typer.confirm("Proceed?"):
+        raise typer.Abort()
+    ga.storage.delete_event(event.id)
+    console.print(f"[green]✓[/green] deleted {str(event.id)[:8]}")
 
 
 @log_app.command("seed")

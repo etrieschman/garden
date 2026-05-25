@@ -206,6 +206,17 @@ class SQLiteStorage:
                 stmt = stmt.where(EventRow.occurred_at >= since)
             return [r.to_domain() for r in s.scalars(stmt)]
 
+    def find_events_by_prefix(self, id_prefix: str) -> list[Event]:
+        with self.Session() as s:
+            stmt = select(EventRow).where(EventRow.id.like(f"{id_prefix}%"))
+            return [r.to_domain() for r in s.scalars(stmt)]
+
+    def delete_event(self, event_id: UUID) -> None:
+        with self.Session.begin() as s:
+            row = s.get(EventRow, str(event_id))
+            if row is not None:
+                s.delete(row)
+
     # ---- observations ----
     def create_observation(self, observation: Observation) -> Observation:
         with self.Session.begin() as s:
