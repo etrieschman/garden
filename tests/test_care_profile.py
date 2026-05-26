@@ -242,7 +242,8 @@ def test_fertilize_quiet_when_recently_fed_enough_n() -> None:
     transplant = Event(
         type=EventType.TRANSPLANTED, plant_id="gem-1", occurred_at=NOW - timedelta(days=20)
     )
-    # 50g of 10-10-10 = 5g N applied yesterday → more than enough to clear vegetative deficit
+    # 50g of synthetic 10-10-10 (release_fraction=1.0) = 5g N → clears the
+    # vegetative deficit handily.
     fert = Event(
         type=EventType.FERTILIZED,
         plant_id="gem-1",
@@ -260,6 +261,35 @@ def test_fertilize_quiet_when_recently_fed_enough_n() -> None:
         CATALOG,
     )
     assert recs == []
+
+
+def test_release_fraction_discounts_slow_release_amendments() -> None:
+    """A bed-scoped composted-manure amendment counts at the manure's
+    `release_fraction` rate (rule-of-thumb ~20% for cow manure), not at its
+    full label NPK. This guards against the engine treating 1 cu ft of manure
+    as 'season's worth of N applied right now'."""
+    from garden.services.nutrients import event_nutrients
+
+    # 1 kg of cow manure (composted): 0.5% label N, release_fraction 0.20
+    # → available N = 1000g × 0.5% × 0.20 = 1.0 g
+    event = Event(
+        type=EventType.AMENDED,
+        location_id="bed",
+        occurred_at=NOW,
+        details={"type": "cow_manure", "quantity": 1.0, "unit": "kg"},
+    )
+    totals = event_nutrients(event, CATALOG)
+    assert abs(totals.n_g - 1.0) < 0.01
+
+    # Same mass of synthetic 10-10-10 (release_fraction 1.0) → 100 g N.
+    event_synth = Event(
+        type=EventType.FERTILIZED,
+        plant_id="gem-1",
+        occurred_at=NOW,
+        details={"type": "balanced_10_10_10", "quantity": 1.0, "unit": "kg"},
+    )
+    totals_synth = event_nutrients(event_synth, CATALOG)
+    assert abs(totals_synth.n_g - 100.0) < 0.1
 
 
 def test_fertilize_uses_container_multiplier_for_target() -> None:

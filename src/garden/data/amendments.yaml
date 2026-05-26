@@ -6,11 +6,30 @@
 #   kind:                amendment | fertilizer  (informational; both feed the
 #                        nutrient accumulator identically)
 #   kg_per_l:            bulk density. Required if users enter volume; ignored if
-#                        they enter mass. Typical values from extension-service
-#                        publications and engineering toolbox tables.
-#   npk:                 default N-P2O5-K2O percent by mass. Users can override
-#                        per-event with --n-pct / --p-pct / --k-pct (e.g. if
-#                        their bag label disagrees).
+#                        they enter mass.
+#   npk:                 default N-P2O5-K2O **label** percent by mass. Users
+#                        can override per-event with --n-pct / --p-pct / --k-pct.
+#   release_fraction:    fraction of label NPK that's available *this season*.
+#                        Defaults to 1.0 (synthetic/liquid — full availability).
+#                        Composted organics typically release only 15-30% of
+#                        their label N in the first year; the rest mineralizes
+#                        over subsequent seasons.
+#
+#                        Rules of thumb (extension services give ranges; we pick
+#                        a single value per amendment for simplicity):
+#                          synthetic granular / liquid:  1.0
+#                          blood meal, fast-N organics:  0.7-0.9
+#                          worm castings, kelp meal:     0.3-0.4
+#                          composted manures:            0.15-0.30
+#                          raw / fresh compost:          0.10-0.15
+#                          bone meal (P-release):        0.20-0.30
+#
+#                        Same fraction is applied to N, P, and K — this is a
+#                        simplification. In reality K from organics is usually
+#                        more available than N or P. If you care about that
+#                        precision, override per-event with structured NPK
+#                        overrides set to the *available* values.
+#
 #   notes:               brief context
 #   sources:             where the values came from
 #
@@ -23,16 +42,19 @@ entries:
     kind: amendment
     kg_per_l: 0.60
     npk: [0.5, 0.5, 0.5]
-    notes: Wet weight; raw manure can be 0.8-0.6-0.4. Slow-release.
+    release_fraction: 0.20
+    notes: Wet weight; raw manure can be 0.8-0.6-0.4. Slow-release; ~20% of label N available in year 1.
     sources:
       - UC Davis ANR — Manure Production and Characteristics
+      - "Penn State Extension — Manure N availability table (typically 15-30% year 1)"
 
   - key: chicken_manure
     display: Chicken manure (composted)
     kind: amendment
     kg_per_l: 0.55
     npk: [3.0, 2.5, 1.5]
-    notes: Hotter than cow manure; use sparingly fresh.
+    release_fraction: 0.35
+    notes: Hotter than cow manure; releases faster (~30-40% year 1). Use sparingly fresh.
     sources:
       - Penn State Extension — Composted Manure Analysis
 
@@ -41,7 +63,8 @@ entries:
     kind: amendment
     kg_per_l: 0.55
     npk: [1.0, 1.0, 1.0]
-    notes: Typical mixed home compost; varies widely.
+    release_fraction: 0.15
+    notes: Typical mixed home compost; varies widely. Mostly a soil conditioner — slow nutrient release.
     sources:
       - Cornell Coop Ext — Composting at Home
 
@@ -50,6 +73,8 @@ entries:
     kind: amendment
     kg_per_l: 0.70
     npk: [1.0, 0.5, 0.5]
+    release_fraction: 0.40
+    notes: Faster-release than ordinary compost due to enzymes from worm digestion.
     sources:
       - OSU Extension — Vermicomposting
 
@@ -58,14 +83,16 @@ entries:
     kind: amendment
     kg_per_l: 0.15
     npk: [0.0, 0.0, 0.0]
-    notes: Negligible nutrients; for water retention and acidification.
+    release_fraction: 1.0
+    notes: Negligible nutrients; for water retention and acidification. release_fraction is moot.
 
   - key: topsoil
     display: Garden topsoil
     kind: amendment
     kg_per_l: 1.30
     npk: [0.1, 0.05, 0.1]
-    notes: Variable; assume near-zero for nutrient accounting.
+    release_fraction: 0.20
+    notes: Variable; assume near-zero for nutrient accounting in practice.
 
   # ---- fertilizers (concentrated, fast-release) ----
   - key: blood_meal
@@ -73,7 +100,8 @@ entries:
     kind: fertilizer
     kg_per_l: 0.60
     npk: [12.0, 0.0, 0.0]
-    notes: Pure N source; rapid.
+    release_fraction: 0.80
+    notes: Pure N source; rapid mineralization (~70-90% year 1).
     sources:
       - "Organic Materials Review Institute — Blood meal datasheet"
 
@@ -82,38 +110,44 @@ entries:
     kind: fertilizer
     kg_per_l: 0.70
     npk: [3.0, 15.0, 0.0]
-    notes: Slow-release P; good for flowering/fruiting.
+    release_fraction: 0.25
+    notes: Slow-release P (releases over multiple years); good for flowering/fruiting.
 
   - key: fish_emulsion
     display: Fish emulsion (5-1-1 concentrate)
     kind: fertilizer
     kg_per_l: 1.05
     npk: [5.0, 1.0, 1.0]
-    notes: Diluted before application; track quantity of concentrate.
+    release_fraction: 0.90
+    notes: Diluted before application; track quantity of concentrate. Near-immediate availability.
 
   - key: balanced_5_10_5
     display: Balanced 5-10-5 (granular)
     kind: fertilizer
     kg_per_l: 1.00
     npk: [5.0, 10.0, 5.0]
-    notes: Generic balanced; many brands sell this ratio.
+    release_fraction: 1.0
+    notes: Synthetic; assumes full availability.
 
   - key: balanced_10_10_10
     display: Balanced 10-10-10 (granular)
     kind: fertilizer
     kg_per_l: 1.00
     npk: [10.0, 10.0, 10.0]
+    release_fraction: 1.0
 
   - key: tomato_fertilizer_3_4_6
     display: Tomato/vegetable fertilizer 3-4-6
     kind: fertilizer
     kg_per_l: 1.00
     npk: [3.0, 4.0, 6.0]
-    notes: Lower-N formula; good for fruiting tomatoes/peppers.
+    release_fraction: 1.0
+    notes: Lower-N synthetic formula; good for fruiting tomatoes/peppers.
 
   - key: kelp_meal
     display: Kelp meal
     kind: fertilizer
     kg_per_l: 0.40
     npk: [1.0, 0.1, 2.0]
+    release_fraction: 0.35
     notes: Slow-release K + micronutrients.

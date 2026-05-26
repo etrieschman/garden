@@ -14,11 +14,32 @@ from pydantic import BaseModel, Field
 
 
 class AmendmentEntry(BaseModel):
+    """One amendment / fertilizer in the catalog.
+
+    `npk` is the **label** N-P2O5-K2O percent by mass. To get the nutrient
+    available *this season*, multiply by `release_fraction` — synthetic
+    granulars and liquid fertilizers release ~100% (`1.0`), composted manures
+    and slow-release organics release only ~15-30% in the first year. The
+    rest mineralizes over subsequent seasons; the engine ignores that for
+    simplicity.
+    """
+
     key: str
     display: str
     kind: str
     kg_per_l: float
     npk: list[float] = Field(min_length=3, max_length=3)
+    release_fraction: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Fraction of label NPK that mineralizes this season. "
+            "1.0 = full availability (synthetics, liquids); ~0.2 = composted "
+            "manure / compost; ~0.8 = blood meal. Applied uniformly to N, P, K — "
+            "a simplification (K is usually faster than N or P from organics)."
+        ),
+    )
     notes: str | None = None
     sources: list[str] = Field(default_factory=list)
 

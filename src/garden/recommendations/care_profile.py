@@ -235,8 +235,14 @@ def _check_fertilize_by_nutrients(
     stage_start = _stage_start_date(profile, stage, transplant_date, observations, base_temp)
     # Plant-specific events + bed-scoped amendments at the same location both
     # contribute to nutrient totals for this plant.
+    #
+    # `since=transplant_date` (not stage_start): slow-release amendments applied
+    # at planting time continue mineralizing for weeks. Counting them against
+    # the current stage's target is the right honest accounting — they're still
+    # feeding the plant. If you heavily amend at transplant, the engine should
+    # stay quiet through vegetative; if you starve-prep, it should fire early.
     bed_events = ctx.bed_events_by_location.get(plant.location_id or "", [])
-    applied = cumulative_nutrients(events + bed_events, catalog, since=stage_start)
+    applied = cumulative_nutrients(events + bed_events, catalog, since=transplant_date)
     weeks_in_stage = max(0.0, (ctx.now - stage_start).total_seconds() / (86400 * 7))
     target = _stage_targets(stage, weeks_in_stage, multiplier)
     deficit_n_g = target.n_g - applied.n_g

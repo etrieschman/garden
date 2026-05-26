@@ -151,10 +151,12 @@ def _resolve_plant_nutrition(ga, pl):
     bed_events = (
         ctx.bed_events_by_location.get(pl.location_id, []) if pl.location_id else []
     )
+    # Count everything since transplant — see care_profile._check_fertilize_by_nutrients
+    # for why (slow-release amendments span multiple stages).
     applied = cumulative_nutrients(
         ctx.events_by_plant.get(pl.id, []) + bed_events,
         AmendmentCatalog.load_default(),
-        since=stage_start,
+        since=transplant,
     )
 
     target = None

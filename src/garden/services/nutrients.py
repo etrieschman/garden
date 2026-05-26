@@ -1,7 +1,14 @@
 """Unit conversion + nutrient accounting from events.
 
 Walks `AMENDED` and `FERTILIZED` events, converts each (quantity, unit, type)
-to a mass in grams of N / P2O5 / K2O applied, and sums across a time window.
+to a mass in grams of **plant-available** N / P2O5 / K2O applied, and sums
+across a time window.
+
+"Plant-available" means: `mass × NPK% × release_fraction`. Synthetic granulars
+have `release_fraction = 1.0` (full availability); composted manures and
+slow-release organics have `release_fraction ≈ 0.15-0.30` (most of the label
+N is locked in organic matter and mineralizes over subsequent seasons). See
+`src/garden/data/amendments.yaml` for per-amendment values.
 
 This is the single source of truth for "how much N did I apply to plant X
 since transplant?" The recommendation engine and `garden show <plant>` both
@@ -87,6 +94,9 @@ def event_nutrients(event: Event, catalog: AmendmentCatalog) -> NutrientTotals:
 
     entry = catalog.get(type_key) if type_key else None
     density = entry.kg_per_l if entry else None
+    # Custom amendments (unknown to catalog but NPK provided) are assumed
+    # quick-release. Catalog entries carry their own release_fraction.
+    release = entry.release_fraction if entry else 1.0
 
     # Per-event NPK overrides win over the catalog default.
     n_pct = _coerce_float(details.get("n_pct"))
@@ -103,10 +113,13 @@ def event_nutrients(event: Event, catalog: AmendmentCatalog) -> NutrientTotals:
     if mass_kg is None:
         return NutrientTotals()
     mass_g = mass_kg * 1000
+    # Apply release_fraction uniformly to N, P, K — a simplification. In
+    # reality K is usually more available than N or P from organic sources;
+    # override per-event with available-NPK values if that precision matters.
     return NutrientTotals(
-        n_g=mass_g * (n_pct or 0) / 100,
-        p2o5_g=mass_g * (p2o5_pct or 0) / 100,
-        k2o_g=mass_g * (k2o_pct or 0) / 100,
+        n_g=mass_g * (n_pct or 0) / 100 * release,
+        p2o5_g=mass_g * (p2o5_pct or 0) / 100 * release,
+        k2o_g=mass_g * (k2o_pct or 0) / 100 * release,
     )
 
 
