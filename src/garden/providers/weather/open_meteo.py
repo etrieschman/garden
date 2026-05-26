@@ -3,7 +3,7 @@
 No API key. Free for hobby use. Endpoint docs: https://open-meteo.com/en/docs
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
@@ -20,12 +20,19 @@ class OpenMeteoProvider:
         self._timeout = timeout
 
     def daily(self, lat: float, lon: float, start: date, end: date) -> list[WeatherSample]:
+        """Return one WeatherSample per day in [start, end].
+
+        Archive endpoint serves [start, today-1]; forecast serves [today, end].
+        The two endpoints used to overlap on today; the explicit split below
+        guarantees one row per day.
+        """
         today = date.today()
         out: list[WeatherSample] = []
-        if start < today:
-            out.extend(self._fetch(_ARCHIVE_URL, lat, lon, start, min(end, today)))
-        if end >= today:
-            forecast_start = max(start, today)
+        archive_end = min(end, today - timedelta(days=1))
+        if start <= archive_end:
+            out.extend(self._fetch(_ARCHIVE_URL, lat, lon, start, archive_end))
+        forecast_start = max(start, today)
+        if forecast_start <= end:
             out.extend(self._fetch(_FORECAST_URL, lat, lon, forecast_start, end))
         return out
 

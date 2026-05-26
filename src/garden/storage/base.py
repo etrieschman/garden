@@ -64,6 +64,14 @@ class Storage(Protocol):
         location_id: str | None = None,
         since: datetime | None = None,
     ) -> list[Observation]: ...
+    def delete_observations(
+        self,
+        *,
+        location_id: str,
+        source_prefix: str,
+        since: datetime,
+        until: datetime,
+    ) -> int: ...
 
     # ---- recommendations ----
     def create_recommendation(self, rec: Recommendation) -> Recommendation: ...

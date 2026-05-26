@@ -254,6 +254,28 @@ class SQLiteStorage:
                 stmt = stmt.where(ObservationRow.occurred_at >= since)
             return [r.to_domain() for r in s.scalars(stmt)]
 
+    def delete_observations(
+        self,
+        *,
+        location_id: str,
+        source_prefix: str,
+        since: datetime,
+        until: datetime,
+    ) -> int:
+        """Delete observations for one location whose source starts with `source_prefix`,
+        in [since, until]. Used to make weather refreshes idempotent."""
+        with self.Session.begin() as s:
+            return (
+                s.query(ObservationRow)
+                .filter(
+                    ObservationRow.location_id == location_id,
+                    ObservationRow.source.like(f"{source_prefix}%"),
+                    ObservationRow.occurred_at >= since,
+                    ObservationRow.occurred_at <= until,
+                )
+                .delete()
+            )
+
     # ---- recommendations ----
     def create_recommendation(self, rec: Recommendation) -> Recommendation:
         with self.Session.begin() as s:

@@ -185,8 +185,11 @@ def _due_label(rec: Recommendation, now: datetime) -> str:
 def cmd_weather(
     days_back: Annotated[int, typer.Option(help="How many days of history to pull.")] = 14,
     days_forward: Annotated[int, typer.Option(help="Forecast days.")] = 7,
+    no_store: Annotated[
+        bool, typer.Option("--no-store", help="Display only; don't write observations.")
+    ] = False,
 ) -> None:
-    """Refresh weather observations for all beds with lat/lon."""
+    """Fetch and display weather for every bed (and store observations by default)."""
     ga = garden_app()
     locs = [loc for loc in ga.storage.list_locations() if loc.lat and loc.lon]
     if not locs:
@@ -194,36 +197,89 @@ def cmd_weather(
         return
     start = date.today() - timedelta(days=days_back)
     end = date.today() + timedelta(days=days_forward)
-    n = 0
+    today = date.today()
+    stored = 0
     for loc in locs:
         try:
             samples = ga.weather.daily(loc.lat, loc.lon, start, end)
         except Exception as e:
             console.print(f"[red]✗[/red] {loc.id}: {e}")
             continue
+
+        # ---- display ----
+        title = f"{loc.id} — {ga.weather.name}  ({loc.lat:.4f}, {loc.lon:.4f})  {start} → {end}"
+        t = Table(title=title)
+        t.add_column("date")
+        t.add_column("min", justify="right")
+        t.add_column("mean", justify="right")
+        t.add_column("max", justify="right")
+        t.add_column("rain mm", justify="right")
+        t.add_column("sun h", justify="right")
+        t.add_column("")
+        rain_total = 0.0
+        gdd10_total = 0.0
         for s in samples:
+            s_date = s.timestamp.date()
             if s.rain_mm is not None:
-                logging.log_observation(
-                    ga.storage,
-                    metric="rain_mm",
-                    value_numeric=s.rain_mm,
-                    unit="mm",
-                    location_id=loc.id,
-                    occurred_at=s.timestamp,
-                    source=f"provider:{ga.weather.name}",
-                )
-                n += 1
+                rain_total += s.rain_mm
             if s.temp_c_mean is not None:
+                gdd10_total += max(0.0, s.temp_c_mean - 10.0)
+            marker = (
+                "today" if s_date == today else ("forecast" if s_date > today else "")
+            )
+            row_style = "bold cyan" if s_date == today else None
+            t.add_row(
+                s_date.isoformat(),
+                f"{s.temp_c_min:.0f}" if s.temp_c_min is not None else "—",
+                f"{s.temp_c_mean:.0f}" if s.temp_c_mean is not None else "—",
+                f"{s.temp_c_max:.0f}" if s.temp_c_max is not None else "—",
+                f"{s.rain_mm:.1f}" if s.rain_mm is not None else "—",
+                f"{s.sunshine_hours:.1f}" if s.sunshine_hours is not None else "—",
+                marker,
+                style=row_style,
+            )
+        console.print(t)
+        console.print(
+            f"  [dim]totals:[/dim] rain {rain_total:.1f} mm   "
+            f"GDD (base 10°C): {gdd10_total:.0f}"
+        )
+
+        # ---- store (unless --no-store) ----
+        if no_store:
+            continue
+        # Idempotent refresh: drop existing provider observations for this
+        # location in the same window, then insert. Prevents the GDD/rain
+        # accumulator from double-counting if the user runs `weather` twice.
+        window_start = datetime(start.year, start.month, start.day, tzinfo=UTC)
+        window_end = datetime(end.year, end.month, end.day, 23, 59, tzinfo=UTC)
+        ga.storage.delete_observations(
+            location_id=loc.id,
+            source_prefix="provider:",
+            since=window_start,
+            until=window_end,
+        )
+        for s in samples:
+            for metric, value, unit in (
+                ("rain_mm", s.rain_mm, "mm"),
+                ("temp_c_mean", s.temp_c_mean, "C"),
+                ("temp_c_min", s.temp_c_min, "C"),
+                ("temp_c_max", s.temp_c_max, "C"),
+                ("sunshine_hours", s.sunshine_hours, "h"),
+            ):
+                if value is None:
+                    continue
                 logging.log_observation(
                     ga.storage,
-                    metric="temp_c_mean",
-                    value_numeric=s.temp_c_mean,
-                    unit="C",
+                    metric=metric,
+                    value_numeric=value,
+                    unit=unit,
                     location_id=loc.id,
                     occurred_at=s.timestamp,
                     source=f"provider:{ga.weather.name}",
                 )
-                n += 1
-    console.print(
-        f"[green]✓[/green] Stored {n} weather observations across {len(locs)} beds"
-    )
+                stored += 1
+
+    if no_store:
+        console.print("[dim]--no-store: nothing written[/dim]")
+    else:
+        console.print(f"[green]✓[/green] Stored {stored} observations across {len(locs)} beds")
