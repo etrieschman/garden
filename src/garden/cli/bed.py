@@ -20,7 +20,13 @@ def bed_add(
     ] = LocationKind.RAISED_BED,
     dim: Annotated[
         str | None,
-        typer.Option(help="Dimensions like 240x120x30cm or 40cm (diameter)."),
+        typer.Option(
+            help=(
+                "Dimensions in integer cm. LxWxD raised beds: '240x120x30cm'. "
+                "LxW only: '60x40cm'. Round containers (diameter): '40cm'. "
+                "Round decimals to the nearest cm."
+            ),
+        ),
     ] = None,
     lat: Annotated[
         float | None, typer.Option(help="Latitude (defaults to garden default).")
@@ -37,7 +43,10 @@ def bed_add(
 ) -> None:
     """Add a bed/location."""
     ga = garden_app()
-    dims = garden_svc.parse_dimensions(dim) if dim else None
+    try:
+        dims = garden_svc.parse_dimensions(dim) if dim else None
+    except ValueError as e:
+        raise typer.BadParameter(str(e), param_hint="--dim") from e
     final_lat = lat if lat is not None else ga.meta.default_lat
     final_lon = lon if lon is not None else ga.meta.default_lon
     if strict() and (final_lat is None or final_lon is None):

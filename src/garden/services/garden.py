@@ -24,9 +24,27 @@ def _slug(*parts: str) -> str:
 
 
 def parse_dimensions(text: str) -> Dimensions:
-    """Parse '240x120x30cm' or '40cm' (diameter) or '60x40cm' (LxW)."""
-    text = text.strip().lower().rstrip(" cm").rstrip("cm").strip()
-    parts = [int(p) for p in text.replace("x", " ").split() if p.isdigit()]
+    """Parse a dimensions string in **integer cm**.
+
+    Accepted forms:
+        - ``"40cm"``          → round container, diameter only
+        - ``"60x40cm"``       → length × width
+        - ``"240x120x30cm"``  → length × width × depth
+
+    Decimals are rejected (round to the nearest cm). Raises ValueError on
+    anything that doesn't parse, so a typo doesn't silently drop a dimension.
+    """
+    cleaned = text.strip().lower().removesuffix("cm").strip()
+    raw = cleaned.replace("x", " ").split()
+    if not raw:
+        raise ValueError(f"could not parse dimensions: {text!r}")
+    try:
+        parts = [int(p) for p in raw]
+    except ValueError as e:
+        raise ValueError(
+            f"dimensions must be integer cm (got {text!r}); "
+            "round to the nearest centimetre, e.g. 30 instead of 30.5"
+        ) from e
     if len(parts) == 1:
         return Dimensions(diameter_cm=parts[0])
     if len(parts) == 2:

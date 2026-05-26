@@ -21,6 +21,12 @@ htmlcov/
 # Cached API responses (regeneratable)
 garden-data/cache/
 
+# Personal interactive-window scratchpads
+scratch.py
+scratch_*.py
+notebooks/scratch*.py
+notebooks/.ipynb_checkpoints/
+
 # Environment
 .env
 .env.local

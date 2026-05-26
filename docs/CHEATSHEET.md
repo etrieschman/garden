@@ -26,7 +26,10 @@ garden bed list
 `--kind` choices: `raised_bed`, `in_ground`, `container`, `greenhouse`,
 `hydroponic`, `indoor`, `seed_tray`.
 
-`--dim` format: `NxNxNcm` (L×W×D) or `Ncm` (diameter for round containers).
+`--dim` format (integer cm only — round decimals to the nearest cm):
+- `NxNxNcm` — length × width × depth (raised beds, in-ground)
+- `NxNcm` — length × width (no depth set)
+- `Ncm` — diameter (round containers)
 
 ## Plants
 
