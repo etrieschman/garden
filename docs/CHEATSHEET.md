@@ -89,26 +89,55 @@ garden show <plant>                      # one plant's full history
 ```bash
 garden weather                           # pull Open-Meteo for all beds
 garden weather --days-back 30 --days-forward 7
-garden recommend                         # run engines, persist results
+garden recommend                         # default: next 7 days, sorted by due date
+garden recommend --within 3              # urgent (next 3 days only)
+garden recommend --within 30             # full month-ahead
+garden recommend --all                   # show all recs regardless of due date
 garden recommend --no-weather            # offline (skip weather fetch)
 ```
 
-Recommendations come from per-species **care profiles** (water cadence, frost
-threshold, fertilizer interval) sourced from cooperative-extension publications.
-Each profile knows the species' normal vs. hot watering cadence, what counts as
-"significant" rain, and frost tolerance. The engine pairs profiles with your
-logged events and the weather forecast.
+Output is a timeline: each rec carries a `due_at` so you see "TODAY / tomorrow
+/ in 3 days" not just a flat list of overdue items.
+
+### How the engine decides
+
+Recommendations come from per-species **care profiles** in
+`src/garden/data/care_profiles.yaml`, with citations to cooperative-extension
+publications. Each profile knows:
+
+- **Water cadence** — normal days-between, hot-cadence, threshold temp, and
+  what rain depth counts as "a watering"
+- **Frost tolerance** — minimum safe temp (null if frost-hardy)
+- **Growth stages** (GDD-driven) — establishing / vegetative / flowering /
+  fruiting boundaries with stage-appropriate fertilizer mix and cadence
+- **GDD base temp** — used to accumulate degree-days from your weather
+  observations (tomato 10°C, lettuce 5°C, pepper 12°C, etc.)
+- **Container multiplier** — feeds and waters faster in containers / seed trays
+
+The engine pairs profiles with your logged events and the weather forecast:
+- last watering / last rain → next water due date (or hot cadence if forecast hot)
+- transplant date + accumulated GDD → current growth stage → fertilizer mix and cadence
+- container vs raised bed → multiplier on feed cadence
+- forecast min temp → frost warning if below profile threshold
+
+### Inspecting profiles
 
 ```bash
 garden profile list                      # all species the engine knows
-garden profile show "Garden Gem"         # the profile used for one taxon
+garden profile show "Garden Gem"         # merged profile for one taxon
 garden profile show "Solanum lycopersicum"
+garden show <plant>                      # adds current GDD + growth stage
 ```
 
-Adding a new species: edit `src/garden/data/care_profiles.yaml`. Each profile
-can also have **cultivar-specific overrides** (e.g. species default is 5-day
-water cadence, cultivar X is a heavier fruiter → 4-day cadence). The engine
-merges species + cultivar at lookup time.
+Adding a species = edit `src/garden/data/care_profiles.yaml`. Cultivars override
+species defaults field-by-field. No code changes.
+
+### Adding a new recommendation engine
+
+The `RecommendationEngine` Protocol lets you plug in ML, ET-based irrigation,
+USDA scrapers, etc. Drop a class in `src/garden/recommendations/`, add it to the
+`engines=[...]` list in `app.py`, and the orchestrator dedupes by `(plant_id,
+action)` keeping highest confidence.
 
 ## Data exploration (notebook)
 

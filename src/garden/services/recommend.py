@@ -18,10 +18,13 @@ def build_context(
     forecast_days: int = 5,
     history_days: int = 30,
 ) -> GardenContext:
-    now = now or datetime.now(UTC).replace(tzinfo=None)
+    now = now or datetime.now(UTC)
     plants = storage.list_plants()
     locations = {loc.id: loc for loc in storage.list_locations()}
     taxa = {t.id: t for t in storage.list_taxa()}
+    obs_by_loc: dict[str, list] = {}
+    for loc_id in locations:
+        obs_by_loc[loc_id] = storage.list_observations(location_id=loc_id)
 
     events_by_plant: dict[str, list[Event]] = {}
     history_since = now - timedelta(days=history_days)
@@ -49,6 +52,7 @@ def build_context(
         locations=locations,
         taxa=taxa,
         events_by_plant=events_by_plant,
+        observations_by_location=obs_by_loc,
         forecast_by_location=forecast_by_location,
     )
 
@@ -76,6 +80,9 @@ def refresh_recommendations(
 ) -> list[Recommendation]:
     ctx = build_context(storage, weather=weather)
     recs = run_engines(engines, ctx)
+    # Replace, not accumulate: each `garden recommend` produces a fresh snapshot.
+    # Dismissed recs are preserved so we don't re-suggest things you said no to.
+    storage.clear_undismissed_recommendations()
     for rec in recs:
         storage.create_recommendation(rec)
     return recs

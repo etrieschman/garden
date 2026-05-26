@@ -16,6 +16,7 @@ class Recommendation(BaseModel):
     engine: str          # name of the engine that produced it
     confidence: float = 1.0
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    due_at: datetime | None = None    # when the action becomes due
     valid_after: datetime | None = None
     valid_until: datetime | None = None
     dismissed_at: datetime | None = None

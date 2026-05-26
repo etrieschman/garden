@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 import typer
 from rich.table import Table
 
 from garden.cli._app import app, console, garden_app
+from garden.domain import Recommendation
+from garden.recommendations import CareProfileBundle
+from garden.recommendations.care_profile import current_stage
 from garden.services import garden as garden_svc
 from garden.services import insights, logging, recommend
 
@@ -70,15 +73,37 @@ def show(plant: str) -> None:
                 ", ".join(f"{k}={v}" for k, v in (e.details or {}).items()),
             )
         console.print(et)
+    # GDD + growth stage (if this plant's species has a profile with stages)
+    stage_label, gdd = _resolve_current_stage(ga, pl)
+    if stage_label is not None and gdd is not None:
+        console.print(f"  GDD since transplant: {gdd:.0f}  →  stage: [bold]{stage_label}[/bold]")
+
     if status.active_recommendations:
         console.print()
         rt = Table(title="Recommendations")
         rt.add_column("action")
+        rt.add_column("due")
         rt.add_column("reason")
         rt.add_column("engine")
         for r in status.active_recommendations:
-            rt.add_row(r.action, r.reason, r.engine)
+            rt.add_row(r.action, _due_label(r, datetime.now(UTC)), r.reason, r.engine)
         console.print(rt)
+
+
+def _resolve_current_stage(ga, pl) -> tuple[str | None, float | None]:
+    """Compute the plant's current growth stage from GDD; quiet on no profile."""
+    taxon = ga.storage.get_taxon(pl.taxon_id)
+    if not taxon:
+        return None, None
+    bundle = CareProfileBundle.load_default()
+    profile = bundle.resolve(taxon.scientific_name, taxon.cultivar)
+    if not profile or not profile.fertilize or not profile.fertilize.stages:
+        return None, None
+    ctx = recommend.build_context(ga.storage, weather=None)
+    stage, gdd = current_stage(pl, profile, ctx)
+    if stage is None or gdd is None:
+        return None, None
+    return stage.name.replace("_", " "), gdd
 
 
 @app.command("status")
@@ -109,16 +134,51 @@ def status() -> None:
 
 @app.command("recommend")
 def cmd_recommend(
+    within: Annotated[
+        int, typer.Option("--within", help="Show recommendations due within N days.")
+    ] = 7,
     no_weather: Annotated[bool, typer.Option(help="Skip weather fetch (offline).")] = False,
+    show_all: Annotated[
+        bool, typer.Option("--all", help="Show every rec regardless of due date.")
+    ] = False,
 ) -> None:
-    """Run recommendation engines and persist results."""
+    """Run recommendation engines and show what's coming, sorted by due date."""
     ga = garden_app()
     weather = None if no_weather else ga.weather
     recs = recommend.refresh_recommendations(ga.storage, ga.engines, weather=weather)
-    console.print(f"[green]✓[/green] Generated {len(recs)} recommendations")
-    for r in recs:
-        target = r.plant_id or r.location_id or "—"
-        console.print(f"  • [bold]{r.action}[/bold] [{target}] — {r.reason}")
+    now = datetime.now(UTC)
+    cutoff = now + timedelta(days=within)
+    visible = (
+        recs if show_all else [r for r in recs if r.due_at is None or r.due_at <= cutoff]
+    )
+    visible.sort(key=lambda r: r.due_at or now + timedelta(days=365))
+
+    header_when = "all recommendations" if show_all else f"next {within} days"
+    console.print(
+        f"[bold]Recommendations[/bold] ({header_when}, as of {now:%Y-%m-%d %H:%M})"
+    )
+    if not visible:
+        console.print("  [dim]nothing in this window[/dim]")
+        return
+    for r in visible:
+        console.print(
+            f"  [bold]{_due_label(r, now)}[/bold]  "
+            f"{r.action:<16} {r.plant_id or r.location_id or '—':<28} {r.reason}"
+        )
+
+
+def _due_label(rec: Recommendation, now: datetime) -> str:
+    if rec.due_at is None:
+        return "no date".rjust(10)
+    delta = rec.due_at - now
+    days = round(delta.total_seconds() / 86400)
+    if days < 0:
+        return f"{-days}d late".rjust(10)
+    if days == 0:
+        return "TODAY".rjust(10)
+    if days == 1:
+        return "tomorrow".rjust(10)
+    return f"in {days}d".rjust(10)
 
 
 @app.command("weather")

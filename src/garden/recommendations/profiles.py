@@ -1,9 +1,8 @@
 """Care-profile schema and bundle loader.
 
 A care profile is per-species (with optional per-cultivar overrides) horticulture
-guidance: how often to water, when frost becomes a risk, fertilizer cadence, etc.
-Sourced from cooperative-extension publications and seed-catalog data, not USDA
-(which is species-level only).
+guidance: how often to water, frost tolerance, GDD-driven fertilizer stages.
+Sourced from cooperative-extension publications and seed-catalog data.
 
 Bundle format lives in `src/garden/data/care_profiles.yaml` — see that file's
 header for the schema and editing rules.
@@ -29,16 +28,35 @@ class FrostProfile(BaseModel):
     min_safe_temp_c: float | None = None  # None => not frost-sensitive
 
 
-class FertilizeProfile(BaseModel):
-    first_feed_days_after_transplant: int = 14
-    interval_days: int = 14
+class GDDProfile(BaseModel):
+    base_temp_c: float = 10.0
+
+
+class FertilizeStage(BaseModel):
+    """A single growth-stage rule for fertilizing.
+
+    `until_gdd` is the upper boundary: stage applies until cumulative GDD
+    (since transplant or seeding) reaches this value. The last stage uses
+    `until_gdd: null` to mean "rest of the plant's life."
+    """
+
+    name: str
+    until_gdd: float | None = None
+    skip: bool = False                  # if True, no fertilizer recommendation
+    cadence_days: int = 14
     preferred: str | None = None
+
+
+class FertilizeProfile(BaseModel):
+    stages: list[FertilizeStage] = Field(default_factory=list)
+    container_multiplier: float = 1.5   # multiply cadence by 1/this for containers
 
 
 class CareProfile(BaseModel):
     scientific_name: str
     cultivar: str | None = None
     common_name: str | None = None
+    gdd: GDDProfile | None = None
     water: WaterProfile | None = None
     frost: FrostProfile | None = None
     fertilize: FertilizeProfile | None = None
@@ -73,7 +91,7 @@ class CareProfileBundle(BaseModel):
 
 
 def _merge(base: CareProfile | None, override: CareProfile) -> CareProfile:
-    """Field-wise merge: override fields win, but None-valued sections fall back to base."""
+    """Field-wise merge: cultivar's explicitly-set fields win over species defaults."""
     if base is None:
         return override
 
@@ -82,8 +100,6 @@ def _merge(base: CareProfile | None, override: CareProfile) -> CareProfile:
             return b
         if b is None:
             return o
-        # Only fields the override *explicitly set* in YAML win; Pydantic defaults
-        # would otherwise silently clobber the species baseline.
         override_set = o.model_dump(exclude_unset=True)
         merged = {**b.model_dump(), **override_set}
         return type(b)(**merged)
@@ -92,6 +108,7 @@ def _merge(base: CareProfile | None, override: CareProfile) -> CareProfile:
         scientific_name=base.scientific_name,
         common_name=override.common_name or base.common_name,
         cultivar=override.cultivar,
+        gdd=section(base.gdd, override.gdd),  # type: ignore[arg-type]
         water=section(base.water, override.water),  # type: ignore[arg-type]
         frost=section(base.frost, override.frost),  # type: ignore[arg-type]
         fertilize=section(base.fertilize, override.fertilize),  # type: ignore[arg-type]

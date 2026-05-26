@@ -26,6 +26,18 @@ class Base(DeclarativeBase):
     pass
 
 
+def _utc(dt: datetime | None) -> datetime | None:
+    """Coerce a possibly-naive datetime read back from SQLite to tz-aware UTC.
+
+    SQLite has no native tz handling; SQLAlchemy may round-trip values as naive
+    even with `DateTime(timezone=True)`. We normalize on the way out so domain
+    code never has to deal with mixed tz-awareness.
+    """
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
 class GardenRow(Base):
     """Single-row table holding garden-wide settings.
 
@@ -100,7 +112,7 @@ class LocationRow(Base):
             parent_id=self.parent_id,
             hardiness_zone=self.hardiness_zone,
             notes=self.notes,
-            created_at=self.created_at,
+            created_at=_utc(self.created_at),
         )
 
     @classmethod
@@ -138,9 +150,9 @@ class PlantRow(Base):
             taxon_id=self.taxon_id,
             location_id=self.location_id,
             status=PlantStatus(self.status),
-            planted_at=self.planted_at,
+            planted_at=_utc(self.planted_at),
             notes=self.notes,
-            created_at=self.created_at,
+            created_at=_utc(self.created_at),
         )
 
     @classmethod
@@ -179,7 +191,7 @@ class EventRow(Base):
         return Event(
             id=UUID(self.id),
             type=EventType(self.type),
-            occurred_at=self.occurred_at,
+            occurred_at=_utc(self.occurred_at),
             plant_id=self.plant_id,
             location_id=self.location_id,
             from_location_id=self.from_location_id,
@@ -229,7 +241,7 @@ class ObservationRow(Base):
             value_numeric=self.value_numeric,
             value_text=self.value_text,
             unit=self.unit,
-            occurred_at=self.occurred_at,
+            occurred_at=_utc(self.occurred_at),
             plant_id=self.plant_id,
             location_id=self.location_id,
             source=self.source,
@@ -266,6 +278,7 @@ class RecommendationRow(Base):
     engine: Mapped[str] = mapped_column(String, index=True)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -280,10 +293,11 @@ class RecommendationRow(Base):
             reason=self.reason,
             engine=self.engine,
             confidence=self.confidence,
-            generated_at=self.generated_at,
-            valid_after=self.valid_after,
-            valid_until=self.valid_until,
-            dismissed_at=self.dismissed_at,
+            generated_at=_utc(self.generated_at),
+            due_at=_utc(self.due_at),
+            valid_after=_utc(self.valid_after),
+            valid_until=_utc(self.valid_until),
+            dismissed_at=_utc(self.dismissed_at),
             details=self.details or {},
         )
 
@@ -298,6 +312,7 @@ class RecommendationRow(Base):
             engine=r.engine,
             confidence=r.confidence,
             generated_at=r.generated_at,
+            due_at=r.due_at,
             valid_after=r.valid_after,
             valid_until=r.valid_until,
             dismissed_at=r.dismissed_at,

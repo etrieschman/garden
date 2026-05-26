@@ -3,7 +3,7 @@
 No API key. Free for hobby use. Endpoint docs: https://open-meteo.com/en/docs
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import httpx
 
@@ -69,7 +69,7 @@ class OpenMeteoProvider:
                 gdd_cum += max(0.0, mean - 10.0)
             samples.append(
                 WeatherSample(
-                    timestamp=datetime.fromisoformat(d),
+                    timestamp=datetime.fromisoformat(d).replace(tzinfo=UTC),
                     temp_c_min=tmin[i] if i < len(tmin) else None,
                     temp_c_max=tmax[i] if i < len(tmax) else None,
                     temp_c_mean=mean,

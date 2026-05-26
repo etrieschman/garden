@@ -38,6 +38,18 @@ class SQLiteStorage:
 
     def init_schema(self) -> None:
         Base.metadata.create_all(self.engine)
+        self._ensure_recommendations_due_at()
+
+    def _ensure_recommendations_due_at(self) -> None:
+        """One-shot inline migration: add recommendations.due_at if missing.
+
+        `Base.metadata.create_all` only creates tables; it never adds columns
+        to existing ones. Older sqlite files lack this column.
+        """
+        with self.engine.begin() as c:
+            cols = c.exec_driver_sql("PRAGMA table_info(recommendations)").fetchall()
+            if not any(col[1] == "due_at" for col in cols):
+                c.exec_driver_sql("ALTER TABLE recommendations ADD COLUMN due_at TIMESTAMP")
 
     # ---- garden settings ----
     def get_garden(self) -> GardenMeta:
@@ -268,4 +280,12 @@ class SQLiteStorage:
         with self.Session.begin() as s:
             row = s.get(RecommendationRow, str(rec_id))
             if row:
-                row.dismissed_at = datetime.now(UTC).replace(tzinfo=None)
+                row.dismissed_at = datetime.now(UTC)
+
+    def clear_undismissed_recommendations(self) -> None:
+        """Delete every recommendation the user hasn't dismissed. Used to make
+        `refresh_recommendations` produce a clean snapshot rather than accumulate."""
+        with self.Session.begin() as s:
+            s.query(RecommendationRow).filter(
+                RecommendationRow.dismissed_at.is_(None)
+            ).delete()

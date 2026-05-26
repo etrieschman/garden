@@ -2,35 +2,39 @@
 #
 # These are starting values gathered from cooperative-extension publications
 # and seed-catalog data. They're heuristics — your actual needs depend on soil,
-# sun, pot vs in-ground, and the local microclimate. Refine the numbers as
-# you learn your beds.
+# sun, pot vs in-ground, and the local microclimate.
 #
-# Schema (see src/garden/recommendations/profiles.py for the Pydantic models):
+# Schema (see src/garden/recommendations/profiles.py for Pydantic models):
 #
 #   profiles:
 #     - scientific_name: <required>
-#       cultivar: <optional; cultivar-specific entries override species defaults>
+#       cultivar: <optional; cultivar entries override species defaults field-by-field>
 #       common_name: <free text>
+#       gdd:
+#         base_temp_c: <float>          # temps above this contribute to GDD
 #       water:
-#         days_between_normal: <int>            # default cadence
-#         days_between_hot: <int>               # cadence when forecast 7d max > threshold
+#         days_between_normal: <int>
+#         days_between_hot: <int>       # cadence when forecast 7d max > threshold
 #         hot_temp_threshold_c: <float>
-#         significant_rain_mm: <float>          # rain >= this resets the watering clock
+#         significant_rain_mm: <float>  # rain >= this counts as a watering
 #       frost:
-#         min_safe_temp_c: <float|null>         # null => frost-hardy (no alert)
+#         min_safe_temp_c: <float|null> # null => frost-hardy
 #       fertilize:
-#         first_feed_days_after_transplant: <int>
-#         interval_days: <int>
-#         preferred: <free text>
+#         container_multiplier: <float> # multiplies cadence in containers (>1 = more frequent)
+#         stages:                       # ordered by GDD; pick the first whose until_gdd > current
+#           - name: <free text>
+#             until_gdd: <float|null>   # null = last stage; rest of life
+#             skip: <bool>              # if true, no fertilizer in this stage
+#             cadence_days: <int>
+#             preferred: <free text>
 #       sources:
 #         - <citation strings>
-#
-# Cultivar entries inherit from their species default; only the fields they set
-# override.
 
 profiles:
   - scientific_name: Solanum lycopersicum
     common_name: Tomato
+    gdd:
+      base_temp_c: 10
     water:
       days_between_normal: 5
       days_between_hot: 3
@@ -39,9 +43,23 @@ profiles:
     frost:
       min_safe_temp_c: 5
     fertilize:
-      first_feed_days_after_transplant: 14
-      interval_days: 14
-      preferred: "balanced 5-10-5 at transplant, sidedress as fruit sets"
+      container_multiplier: 1.5
+      stages:
+        - name: establishing
+          until_gdd: 100
+          skip: true                    # let roots settle
+        - name: vegetative
+          until_gdd: 500
+          cadence_days: 14
+          preferred: high-N (fish emulsion or 8-2-2) to push leafy growth
+        - name: flowering
+          until_gdd: 900
+          cadence_days: 10
+          preferred: balanced 5-10-5; ease off N once flowers appear
+        - name: fruiting
+          until_gdd: null
+          cadence_days: 7
+          preferred: balanced + K sidedress every other feed
     sources:
       - Cornell Cooperative Extension — Tomato Production Guide
 
@@ -49,12 +67,14 @@ profiles:
     cultivar: Garden Gem
     common_name: Tomato
     water:
-      days_between_normal: 4    # heavy fruiter, prefers more frequent water
+      days_between_normal: 4        # heavy fruiter, prefers more frequent water
     sources:
       - Massachusetts Hort. Society — Garden Gem trial notes
 
   - scientific_name: Capsicum annuum
     common_name: Pepper
+    gdd:
+      base_temp_c: 12               # peppers like it warmer; slower GDD accumulation
     water:
       days_between_normal: 7
       days_between_hot: 5
@@ -63,56 +83,89 @@ profiles:
     frost:
       min_safe_temp_c: 5
     fertilize:
-      first_feed_days_after_transplant: 21
-      interval_days: 21
-      preferred: "low-N (3-15-15) once fruiting starts"
+      container_multiplier: 1.5
+      stages:
+        - name: establishing
+          until_gdd: 150
+          skip: true
+        - name: vegetative
+          until_gdd: 600
+          cadence_days: 21
+          preferred: balanced 5-5-5
+        - name: fruiting
+          until_gdd: null
+          cadence_days: 21
+          preferred: low-N (3-15-15); excess N delays fruiting
     sources:
       - Univ. of Massachusetts Vegetable Notes — Pepper Production
 
   - scientific_name: Ocimum basilicum
     common_name: Basil
+    gdd:
+      base_temp_c: 10
     water:
-      days_between_normal: 3    # likes consistent moisture
+      days_between_normal: 3
       days_between_hot: 2
       hot_temp_threshold_c: 28
       significant_rain_mm: 8
     frost:
-      min_safe_temp_c: 10       # very tender, damage well above freezing
+      min_safe_temp_c: 10
     fertilize:
-      first_feed_days_after_transplant: 14
-      interval_days: 21
-      preferred: "balanced, half-strength; high-N can hurt flavor"
+      stages:
+        - name: establishing
+          until_gdd: 75
+          skip: true
+        - name: continuous
+          until_gdd: null
+          cadence_days: 21
+          preferred: balanced half-strength; high-N hurts flavor
     sources:
       - OSU Extension — Growing Basil
 
   - scientific_name: Cucumis sativus
     common_name: Cucumber
+    gdd:
+      base_temp_c: 10
     water:
-      days_between_normal: 4    # heavy drinker
+      days_between_normal: 4
       days_between_hot: 2
       hot_temp_threshold_c: 28
       significant_rain_mm: 12
     frost:
       min_safe_temp_c: 7
     fertilize:
-      first_feed_days_after_transplant: 14
-      interval_days: 14
-      preferred: "balanced; sidedress N at flowering"
+      container_multiplier: 1.5
+      stages:
+        - name: establishing
+          until_gdd: 100
+          skip: true
+        - name: vine_growth
+          until_gdd: 400
+          cadence_days: 14
+          preferred: balanced
+        - name: flowering_fruiting
+          until_gdd: null
+          cadence_days: 14
+          preferred: balanced; sidedress N at flowering
     sources:
       - Cornell Cooperative Extension — Cucumber Production
 
   - scientific_name: Lactuca sativa
     common_name: Lettuce
+    gdd:
+      base_temp_c: 5                # cool-season; accumulates at lower temps
     water:
-      days_between_normal: 3    # shallow roots
+      days_between_normal: 3
       days_between_hot: 2
-      hot_temp_threshold_c: 24  # bolts in heat
+      hot_temp_threshold_c: 24      # bolts in heat
       significant_rain_mm: 8
     frost:
-      min_safe_temp_c: -2       # frost-tolerant; light frost is fine
+      min_safe_temp_c: -2           # frost-tolerant
     fertilize:
-      first_feed_days_after_transplant: 14
-      interval_days: 14
-      preferred: "high-N for leafy growth"
+      stages:
+        - name: leaf_growth
+          until_gdd: null
+          cadence_days: 14
+          preferred: high-N for leafy growth
     sources:
       - OSU Extension — Lettuce Production
