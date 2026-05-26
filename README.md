@@ -16,6 +16,13 @@ uv run garden status         # uses ./garden-data/ as the instance
 
 If you forked or want your own data, see [Making it yours](#making-it-yours).
 
+If you'll run the notebooks, install the output-stripping git filter once per
+clone so notebook outputs never get committed:
+
+```bash
+uv run nbstripout --install
+```
+
 ## Where things live
 
 ```
