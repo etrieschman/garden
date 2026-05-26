@@ -71,6 +71,86 @@ profiles:
     sources:
       - Massachusetts Hort. Society — Garden Gem trial notes
 
+  # UF Klee Lab "Improved" line — flavor-focused F1 hybrids. All three share
+  # disease resistances: gray leaf spot, fusarium wilt 1&2, phytophthora 2&3.
+  # GDD stage boundaries are tightened per cultivar based on days-to-first-ripe
+  # (assuming ~10 GDD/day in MA mid-season).
+
+  - scientific_name: Solanum lycopersicum
+    cultivar: Improved Garden Gem
+    common_name: Tomato
+    water:
+      days_between_normal: 4         # heavy fruiter; early bearer
+    fertilize:
+      stages:
+        - name: establishing
+          until_gdd: 75
+          skip: true
+        - name: vegetative
+          until_gdd: 350              # earlier flower transition (50-55d to fruit)
+          cadence_days: 14
+          preferred: high-N (fish emulsion or 8-2-2)
+        - name: flowering
+          until_gdd: 550
+          cadence_days: 10
+          preferred: balanced 5-10-5; ease off N once flowers appear
+        - name: fruiting
+          until_gdd: null
+          cadence_days: 7
+          preferred: balanced + K sidedress every other feed
+    sources:
+      - UF Klee Lab — semi-determinate, 2-2.5oz elongated red fruit, 50-55d to first ripe
+      - "Resistances: gray leaf spot, fusarium wilt 1&2, phytophthora 2&3"
+
+  - scientific_name: Solanum lycopersicum
+    cultivar: Improved Garden Ruby
+    common_name: Tomato
+    fertilize:
+      stages:
+        - name: establishing
+          until_gdd: 100
+          skip: true
+        - name: vegetative
+          until_gdd: 450
+          cadence_days: 14
+          preferred: high-N (fish emulsion or 8-2-2)
+        - name: flowering
+          until_gdd: 750              # 70-75d to fruit
+          cadence_days: 10
+          preferred: balanced 5-10-5
+        - name: fruiting
+          # determinate — single concentrated set; one feed cycle is usually enough
+          until_gdd: null
+          cadence_days: 14
+          preferred: balanced; K sidedress at first fruit set
+    sources:
+      - UF Klee Lab — determinate, 6oz round deep red fruit, 70-75d to first ripe
+      - "Resistances: gray leaf spot, fusarium wilt 1&2, phytophthora 2&3"
+
+  - scientific_name: Solanum lycopersicum
+    cultivar: Improved BW Hybrid
+    common_name: Tomato
+    fertilize:
+      stages:
+        - name: establishing
+          until_gdd: 150              # late bearer; longer establishing window
+          skip: true
+        - name: vegetative
+          until_gdd: 600
+          cadence_days: 14
+          preferred: high-N (fish emulsion or 8-2-2)
+        - name: flowering
+          until_gdd: 950              # 90-100d to first ripe
+          cadence_days: 10
+          preferred: balanced 5-10-5
+        - name: fruiting
+          until_gdd: null
+          cadence_days: 7
+          preferred: balanced + K sidedress every other feed
+    sources:
+      - UF Klee Lab — indeterminate, 8oz red fruit, 90-100d to first ripe (late bearer)
+      - "Resistances: gray leaf spot, fusarium wilt 1&2, phytophthora 2&3"
+
   - scientific_name: Capsicum annuum
     common_name: Pepper
     gdd:

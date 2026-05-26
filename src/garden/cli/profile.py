@@ -33,14 +33,27 @@ def _print_profile(p: CareProfile) -> None:
             console.print(
                 f"  [bold]frost[/bold]  protect below {p.frost.min_safe_temp_c:g}°C"
             )
-    if p.fertilize:
-        console.print("  [bold]fertilize[/bold]")
+    if p.gdd:
+        console.print(f"  [bold]GDD[/bold]  base temp {p.gdd.base_temp_c:g}°C")
+    if p.fertilize and p.fertilize.stages:
         console.print(
-            f"    first feed: {p.fertilize.first_feed_days_after_transplant}d after transplant"
+            f"  [bold]fertilize[/bold]"
+            f"  (container ×{p.fertilize.container_multiplier:g} cadence)"
         )
-        console.print(f"    then every {p.fertilize.interval_days}d")
-        if p.fertilize.preferred:
-            console.print(f"    preferred: {p.fertilize.preferred}")
+        for i, stage in enumerate(p.fertilize.stages):
+            prev_until = p.fertilize.stages[i - 1].until_gdd if i > 0 else 0
+            range_label = (
+                f"GDD {prev_until or 0:g}–{stage.until_gdd:g}"
+                if stage.until_gdd is not None
+                else f"GDD {prev_until or 0:g}+"
+            )
+            if stage.skip:
+                console.print(f"    {stage.name} ({range_label})  → no feeding")
+                continue
+            line = f"    {stage.name} ({range_label})  every {stage.cadence_days}d"
+            if stage.preferred:
+                line += f"  · prefer: {stage.preferred}"
+            console.print(line)
     if p.sources:
         console.print("  [dim]sources:[/dim]")
         for s in p.sources:
