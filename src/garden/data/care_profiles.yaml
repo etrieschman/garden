@@ -1,0 +1,118 @@
+# Care profiles for common garden plants.
+#
+# These are starting values gathered from cooperative-extension publications
+# and seed-catalog data. They're heuristics — your actual needs depend on soil,
+# sun, pot vs in-ground, and the local microclimate. Refine the numbers as
+# you learn your beds.
+#
+# Schema (see src/garden/recommendations/profiles.py for the Pydantic models):
+#
+#   profiles:
+#     - scientific_name: <required>
+#       cultivar: <optional; cultivar-specific entries override species defaults>
+#       common_name: <free text>
+#       water:
+#         days_between_normal: <int>            # default cadence
+#         days_between_hot: <int>               # cadence when forecast 7d max > threshold
+#         hot_temp_threshold_c: <float>
+#         significant_rain_mm: <float>          # rain >= this resets the watering clock
+#       frost:
+#         min_safe_temp_c: <float|null>         # null => frost-hardy (no alert)
+#       fertilize:
+#         first_feed_days_after_transplant: <int>
+#         interval_days: <int>
+#         preferred: <free text>
+#       sources:
+#         - <citation strings>
+#
+# Cultivar entries inherit from their species default; only the fields they set
+# override.
+
+profiles:
+  - scientific_name: Solanum lycopersicum
+    common_name: Tomato
+    water:
+      days_between_normal: 5
+      days_between_hot: 3
+      hot_temp_threshold_c: 30
+      significant_rain_mm: 10
+    frost:
+      min_safe_temp_c: 5
+    fertilize:
+      first_feed_days_after_transplant: 14
+      interval_days: 14
+      preferred: "balanced 5-10-5 at transplant, sidedress as fruit sets"
+    sources:
+      - Cornell Cooperative Extension — Tomato Production Guide
+
+  - scientific_name: Solanum lycopersicum
+    cultivar: Garden Gem
+    common_name: Tomato
+    water:
+      days_between_normal: 4    # heavy fruiter, prefers more frequent water
+    sources:
+      - Massachusetts Hort. Society — Garden Gem trial notes
+
+  - scientific_name: Capsicum annuum
+    common_name: Pepper
+    water:
+      days_between_normal: 7
+      days_between_hot: 5
+      hot_temp_threshold_c: 30
+      significant_rain_mm: 10
+    frost:
+      min_safe_temp_c: 5
+    fertilize:
+      first_feed_days_after_transplant: 21
+      interval_days: 21
+      preferred: "low-N (3-15-15) once fruiting starts"
+    sources:
+      - Univ. of Massachusetts Vegetable Notes — Pepper Production
+
+  - scientific_name: Ocimum basilicum
+    common_name: Basil
+    water:
+      days_between_normal: 3    # likes consistent moisture
+      days_between_hot: 2
+      hot_temp_threshold_c: 28
+      significant_rain_mm: 8
+    frost:
+      min_safe_temp_c: 10       # very tender, damage well above freezing
+    fertilize:
+      first_feed_days_after_transplant: 14
+      interval_days: 21
+      preferred: "balanced, half-strength; high-N can hurt flavor"
+    sources:
+      - OSU Extension — Growing Basil
+
+  - scientific_name: Cucumis sativus
+    common_name: Cucumber
+    water:
+      days_between_normal: 4    # heavy drinker
+      days_between_hot: 2
+      hot_temp_threshold_c: 28
+      significant_rain_mm: 12
+    frost:
+      min_safe_temp_c: 7
+    fertilize:
+      first_feed_days_after_transplant: 14
+      interval_days: 14
+      preferred: "balanced; sidedress N at flowering"
+    sources:
+      - Cornell Cooperative Extension — Cucumber Production
+
+  - scientific_name: Lactuca sativa
+    common_name: Lettuce
+    water:
+      days_between_normal: 3    # shallow roots
+      days_between_hot: 2
+      hot_temp_threshold_c: 24  # bolts in heat
+      significant_rain_mm: 8
+    frost:
+      min_safe_temp_c: -2       # frost-tolerant; light frost is fine
+    fertilize:
+      first_feed_days_after_transplant: 14
+      interval_days: 14
+      preferred: "high-N for leafy growth"
+    sources:
+      - OSU Extension — Lettuce Production

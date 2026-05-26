@@ -23,10 +23,12 @@ app = typer.Typer(
 bed_app = typer.Typer(help="Manage beds / locations.", no_args_is_help=True)
 log_app = typer.Typer(help="Log a discrete event.", no_args_is_help=True)
 config_app = typer.Typer(help="Show or change garden settings.", no_args_is_help=True)
+profile_app = typer.Typer(help="Inspect care profiles.", no_args_is_help=True)
 
 app.add_typer(bed_app, name="bed")
 app.add_typer(log_app, name="log")
 app.add_typer(config_app, name="config")
+app.add_typer(profile_app, name="profile")
 
 
 def strict() -> bool:

@@ -90,8 +90,25 @@ garden show <plant>                      # one plant's full history
 garden weather                           # pull Open-Meteo for all beds
 garden weather --days-back 30 --days-forward 7
 garden recommend                         # run engines, persist results
-garden recommend --no-weather            # offline
+garden recommend --no-weather            # offline (skip weather fetch)
 ```
+
+Recommendations come from per-species **care profiles** (water cadence, frost
+threshold, fertilizer interval) sourced from cooperative-extension publications.
+Each profile knows the species' normal vs. hot watering cadence, what counts as
+"significant" rain, and frost tolerance. The engine pairs profiles with your
+logged events and the weather forecast.
+
+```bash
+garden profile list                      # all species the engine knows
+garden profile show "Garden Gem"         # the profile used for one taxon
+garden profile show "Solanum lycopersicum"
+```
+
+Adding a new species: edit `src/garden/data/care_profiles.yaml`. Each profile
+can also have **cultivar-specific overrides** (e.g. species default is 5-day
+water cadence, cultivar X is a heavier fruiter → 4-day cadence). The engine
+merges species + cultivar at lookup time.
 
 ## Data exploration (notebook)
 

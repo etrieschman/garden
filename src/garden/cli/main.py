@@ -20,7 +20,7 @@ from rich.table import Table
 from garden import app as app_mod
 
 # importing these modules registers their commands on the shared Typer apps
-from garden.cli import bed, log, plant, show  # noqa: F401
+from garden.cli import bed, log, plant, profile, show  # noqa: F401
 from garden.cli._app import app, config_app, console, garden_app
 from garden.settings import GardenMeta
 
