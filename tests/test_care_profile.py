@@ -263,6 +263,80 @@ def test_fertilize_quiet_when_recently_fed_enough_n() -> None:
     assert recs == []
 
 
+def test_bed_amendment_split_across_plants() -> None:
+    """A bed-scoped amendment is divided evenly across the living plants in the
+    bed — per-plant targets demand per-plant nutrient accounting."""
+    from garden.recommendations.care_profile import plant_available_nutrients
+
+    p1 = Plant(id="t1-1", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    p2 = Plant(id="t1-2", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    # 1 kg synthetic 10-10-10 → 100 g N applied to the whole bed
+    amend = Event(
+        type=EventType.AMENDED,
+        location_id="bed",
+        occurred_at=NOW,
+        details={"type": "balanced_10_10_10", "quantity": 1.0, "unit": "kg"},
+    )
+    ctx = GardenContext(
+        now=NOW,
+        plants=[p1, p2],
+        locations={"bed": Location(id="bed", name="bed", kind=LocationKind.RAISED_BED)},
+        taxa={"t1": TOMATO},
+        events_by_plant={"t1-1": [], "t1-2": []},
+        bed_events_by_location={"bed": [amend]},
+    )
+    assert abs(plant_available_nutrients(p1, ctx, CATALOG).n_g - 50.0) < 0.1
+
+
+def test_dead_plants_excluded_from_amendment_split() -> None:
+    """A dead/removed plant doesn't dilute the share for the living ones."""
+    from garden.recommendations.care_profile import plant_available_nutrients
+
+    alive1 = Plant(id="a1", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    alive2 = Plant(id="a2", taxon_id="t1", location_id="bed", status=PlantStatus.GROWING)
+    dead = Plant(id="d1", taxon_id="t1", location_id="bed", status=PlantStatus.DEAD)
+    amend = Event(
+        type=EventType.AMENDED,
+        location_id="bed",
+        occurred_at=NOW,
+        details={"type": "balanced_10_10_10", "quantity": 1.0, "unit": "kg"},
+    )
+    ctx = GardenContext(
+        now=NOW,
+        plants=[alive1, alive2, dead],
+        locations={"bed": Location(id="bed", name="bed", kind=LocationKind.RAISED_BED)},
+        taxa={"t1": TOMATO},
+        events_by_plant={"a1": [], "a2": [], "d1": []},
+        bed_events_by_location={"bed": [amend]},
+    )
+    # 100 g N split across 2 living plants (dead one ignored) → 50 g each
+    assert abs(plant_available_nutrients(alive1, ctx, CATALOG).n_g - 50.0) < 0.1
+
+
+def test_plant_direct_fertilizer_counts_in_full() -> None:
+    """Fertilizer applied to a specific plant isn't split — it's that plant's."""
+    from garden.recommendations.care_profile import plant_available_nutrients
+
+    p1 = Plant(id="t1-1", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    p2 = Plant(id="t1-2", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    fert = Event(
+        type=EventType.FERTILIZED,
+        plant_id="t1-1",
+        occurred_at=NOW,
+        details={"type": "balanced_10_10_10", "quantity": 0.01, "unit": "kg"},  # 1 g N
+    )
+    ctx = GardenContext(
+        now=NOW,
+        plants=[p1, p2],
+        locations={"bed": Location(id="bed", name="bed", kind=LocationKind.RAISED_BED)},
+        taxa={"t1": TOMATO},
+        events_by_plant={"t1-1": [fert], "t1-2": []},
+        bed_events_by_location={"bed": []},
+    )
+    assert abs(plant_available_nutrients(p1, ctx, CATALOG).n_g - 1.0) < 0.05
+    assert plant_available_nutrients(p2, ctx, CATALOG).n_g == 0.0  # neighbor unaffected
+
+
 def test_release_fraction_discounts_slow_release_amendments() -> None:
     """A bed-scoped composted-manure amendment counts at the manure's
     `release_fraction` rate (rule-of-thumb ~20% for cow manure), not at its

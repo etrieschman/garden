@@ -17,7 +17,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from garden.domain import EventType, LocationKind, Observation, Plant, Recommendation, Taxon
+from garden.domain import (
+    EventType,
+    LocationKind,
+    Observation,
+    Plant,
+    PlantStatus,
+    Recommendation,
+    Taxon,
+)
 from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.base import GardenContext
 from garden.recommendations.profiles import (
@@ -63,7 +71,47 @@ class CareProfileEngine:
         return recs
 
 
+_DEAD_STATUSES = {PlantStatus.DEAD, PlantStatus.REMOVED}
+
+
 # ---------- public helpers (used by `garden show <plant>`) ----------
+
+
+def plant_available_nutrients(
+    plant: Plant,
+    ctx: GardenContext,
+    catalog: AmendmentCatalog,
+    *,
+    since: datetime | None = None,
+) -> NutrientTotals:
+    """Nutrients credited to a single plant since `since`.
+
+    - Plant-direct fertilizer/amend events count in full (you fed *this* plant).
+    - Bed-scoped amendments are a shared pool, split evenly across the living
+      plants drawing from that bed. Care-profile targets are per-plant, so a
+      whole-bed amendment must be apportioned to compare on equal terms. (See
+      the module-level discussion in the commit that introduced this.)
+    """
+    own = cumulative_nutrients(ctx.events_by_plant.get(plant.id, []), catalog, since=since)
+    if not plant.location_id:
+        return own
+    bed_total = cumulative_nutrients(
+        ctx.bed_events_by_location.get(plant.location_id, []), catalog, since=since
+    )
+    share = max(1, _living_plants_in_bed(ctx, plant.location_id))
+    return NutrientTotals(
+        n_g=own.n_g + bed_total.n_g / share,
+        p2o5_g=own.p2o5_g + bed_total.p2o5_g / share,
+        k2o_g=own.k2o_g + bed_total.k2o_g / share,
+    )
+
+
+def _living_plants_in_bed(ctx: GardenContext, location_id: str) -> int:
+    return sum(
+        1
+        for p in ctx.plants
+        if p.location_id == location_id and p.status not in _DEAD_STATUSES
+    )
 
 
 def current_stage(
@@ -209,7 +257,7 @@ def _check_fertilize(
     if stage.target_n_g_per_week is not None:
         return _check_fertilize_by_nutrients(
             plant, taxon, profile, ctx, stage, gdd, observations,
-            base_temp, transplant_date, multiplier, events, catalog,
+            base_temp, transplant_date, multiplier, catalog,
         )
 
     # Cadence fallback: stage didn't declare a target.
@@ -229,20 +277,17 @@ def _check_fertilize_by_nutrients(
     base_temp: float,
     transplant_date: datetime,
     multiplier: float,
-    events: list,
     catalog: AmendmentCatalog,
 ) -> list[Recommendation]:
     stage_start = _stage_start_date(profile, stage, transplant_date, observations, base_temp)
-    # Plant-specific events + bed-scoped amendments at the same location both
-    # contribute to nutrient totals for this plant.
+    # Plant-direct events count in full; bed amendments are split per-capita.
     #
     # `since=transplant_date` (not stage_start): slow-release amendments applied
     # at planting time continue mineralizing for weeks. Counting them against
     # the current stage's target is the right honest accounting — they're still
     # feeding the plant. If you heavily amend at transplant, the engine should
     # stay quiet through vegetative; if you starve-prep, it should fire early.
-    bed_events = ctx.bed_events_by_location.get(plant.location_id or "", [])
-    applied = cumulative_nutrients(events + bed_events, catalog, since=transplant_date)
+    applied = plant_available_nutrients(plant, ctx, catalog, since=transplant_date)
     weeks_in_stage = max(0.0, (ctx.now - stage_start).total_seconds() / (86400 * 7))
     target = _stage_targets(stage, weeks_in_stage, multiplier)
     deficit_n_g = target.n_g - applied.n_g

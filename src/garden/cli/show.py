@@ -15,7 +15,6 @@ from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.care_profile import current_stage
 from garden.services import garden as garden_svc
 from garden.services import insights, logging, recommend
-from garden.services.nutrients import cumulative_nutrients
 
 
 @app.command("list")
@@ -148,15 +147,12 @@ def _resolve_plant_nutrition(ga, pl):
         if transplant is not None
         else None
     )
-    bed_events = (
-        ctx.bed_events_by_location.get(pl.location_id, []) if pl.location_id else []
-    )
-    # Count everything since transplant — see care_profile._check_fertilize_by_nutrients
-    # for why (slow-release amendments span multiple stages).
-    applied = cumulative_nutrients(
-        ctx.events_by_plant.get(pl.id, []) + bed_events,
-        AmendmentCatalog.load_default(),
-        since=transplant,
+    # Plant-direct events in full + per-capita share of bed amendments; counted
+    # since transplant (slow-release amendments span multiple stages).
+    from garden.recommendations.care_profile import plant_available_nutrients
+
+    applied = plant_available_nutrients(
+        pl, ctx, AmendmentCatalog.load_default(), since=transplant
     )
 
     target = None
