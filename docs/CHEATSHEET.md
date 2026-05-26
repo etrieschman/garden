@@ -1,168 +1,154 @@
 # garden — command cheatsheet
 
-Every `garden <command>` also accepts `--help` for the full option list. This
-page is just the at-a-glance map of what exists.
+Every command accepts `--help` for the full option list. This is the map.
 
 ## Setup
 
 ```bash
-garden init [PATH]                       # scaffold a fresh instance
+garden init [PATH]                          # scaffold a fresh instance (defaults to ./garden-data)
 garden init --name "X" --lat 42 --lon -71 --timezone America/New_York
-
-garden config show                       # current settings
-garden config set name "Erich's Garden"  # update one setting
-garden config set default_lat 42.37
+garden config show
+garden config set name "Erich's Garden"     # or default_lat / default_lon / timezone
 ```
 
-## Beds (locations)
+## Beds
 
 ```bash
-garden bed add my-bed --kind raised_bed --dim 240x120x30cm \
+garden bed add patio-north --kind raised_bed --dim 240x120x30cm \
     --substrate "Coast of Maine raised bed mix"
-garden bed add greenhouse --kind greenhouse --lat 42.3 --lon -71.1
 garden bed list
 ```
 
-`--kind` choices: `raised_bed`, `in_ground`, `container`, `greenhouse`,
-`hydroponic`, `indoor`, `seed_tray`.
-
-`--dim` format (integer cm only — round decimals to the nearest cm):
-- `NxNxNcm` — length × width × depth (raised beds, in-ground)
-- `NxNcm` — length × width (no depth set)
-- `Ncm` — diameter (round containers)
+- `--kind`: `raised_bed`, `in_ground`, `container`, `flower_pot`, `greenhouse`, `hydroponic`, `indoor`, `seed_tray`
+- `--dim` (**integer cm**, round decimals): `LxWxDcm` (beds) · `LxWcm` (no depth) · `Ncm` (round-container diameter)
+- `--lat`/`--lon` default to the garden's configured location
 
 ## Plants
 
 ```bash
-garden plant "Garden Gem" --to my-bed              # add an existing-life plant
-garden list                                         # list all plants
-garden show <plant-id-or-name>                      # detail view
+garden plant "Improved Garden Gem" --to patio-north   # add an established plant
+garden list                                            # all plants
+garden show <plant>                                    # detail: events, GDD, stage, nutrients, recs
 ```
 
 ## Logging actions
 
-`garden log <verb> <target> [options]`. The target is auto-detected — pass a
-plant id/name **or** a bed id. Plants win on conflict.
+`garden log <verb> <target> [options]`. The target auto-resolves to a plant
+(id or fuzzy name) or a bed id; plants win on conflict. Every verb takes
+`--when ISO_TIMESTAMP` and `--notes/-n`.
 
-**Creation verbs** (these create a Plant alongside the event):
+**Creation verbs** (also create the Plant):
 
 ```bash
-garden log seed "Basil" --in my-bed
-garden log transplant "Garden Gem" --to my-bed --from old-bed
+garden log seed "Basil" --in patio-north
+garden log transplant "Improved Garden Gem" --to patio-north --from seed-tray
 ```
 
-**Plant- or bed-scoped events** (registry-driven; see `--help` per verb):
+**Event verbs** (registry-driven — `garden log <verb> --help` for fields):
 
-| Verb         | Flags                                              | Typical target |
-|--------------|----------------------------------------------------|----------------|
-| `watered`    | `--amount-l 2.0 --method base`                     | plant or bed   |
-| `fertilized` | `--product "Neptune's" --npk 2-3-1 --amount-g 50`  | plant or bed   |
-| `harvested`  | `--weight-g 250 --count 8`                         | plant          |
-| `pruned`     | `--what suckers --fraction-removed 0.2`            | plant          |
-| `treated`    | `--pest-or-disease aphids --treatment soap`        | plant or bed   |
-| `amended`    | `--added "bag of manure" --amount "50 lb"`         | bed            |
-| `germinated` | (no extra fields)                                  | plant          |
-| `died`       | `--cause "root rot"`                               | plant          |
-| `removed`    | `--reason "end of season"`                         | plant          |
-| `observed`   | `--notes "..."`                                    | plant or bed   |
+| Verb         | Key flags                                                  | Target       |
+|--------------|------------------------------------------------------------|--------------|
+| `watered`    | `--amount-l 2.0 --method base`                             | plant or bed |
+| `fertilized` | `--type fish_emulsion --quantity 2 --unit tbsp`            | plant or bed |
+| `amended`    | `--type cow_manure --quantity 1 --unit cu-ft`              | bed          |
+| `harvested`  | `--weight-g 250 --count 8`                                 | plant        |
+| `pruned`     | `--what suckers --fraction-removed 0.2`                    | plant        |
+| `treated`    | `--pest-or-disease aphids --treatment soap`                | plant or bed |
+| `germinated` | —                                                          | plant        |
+| `died`       | `--cause "root rot"`                                       | plant        |
+| `removed`    | `--reason "end of season"`                                 | plant        |
+| `observed`   | (use `--notes`)                                            | plant or bed |
 
-All verbs accept `--when ISO_TIMESTAMP` and `--notes "..."` / `-n "..."`.
+See [Fertilizer & nutrients](#fertilizer--nutrients) for `--type`/`--unit` details.
 
-## Reviewing + fixing mistakes
+## Review + fix mistakes
 
 ```bash
 garden log list                          # last 20 events with short ids
-garden log list --plant gem --type watered
-garden log list --bed patio-north --limit 50
-garden log delete 412b6a17               # delete by id prefix (asks confirm)
-garden log delete 412b6a17 -y            # skip confirmation
-```
-
-Editing isn't a CLI command yet — delete and re-log to fix mistakes.
-
-## Reports
-
-```bash
-garden status                            # garden overview
-garden show <plant>                      # one plant's full history
+garden log list --plant gem --type watered --limit 50
+garden log delete 412b6a17 [-y]          # delete by id prefix (no in-place edit yet — delete + re-log)
 ```
 
 ## Weather + recommendations
 
 ```bash
-garden weather                           # pull Open-Meteo for all beds
-garden weather --days-back 30 --days-forward 7
-garden recommend                         # default: next 7 days, sorted by due date
-garden recommend --within 3              # urgent (next 3 days only)
-garden recommend --within 30             # full month-ahead
-garden recommend --all                   # show all recs regardless of due date
-garden recommend --no-weather            # offline (skip weather fetch)
+garden weather [--days-back 14 --days-forward 7] [--no-store]   # fetch + show + store
+garden recommend                         # next 7 days, sorted by due date
+garden recommend --within 3|30           # tighter / wider horizon
+garden recommend --all                   # everything, ignoring due date
+garden recommend --no-weather            # offline
 ```
 
-Output is a timeline: each rec carries a `due_at` so you see "TODAY / tomorrow
-/ in 3 days" not just a flat list of overdue items.
+Recommendations carry a `due_at`, so output reads as a timeline (`TODAY` /
+`tomorrow` / `in 3d` / `2d late`).
 
-### How the engine decides
+## How the engine decides
 
-Recommendations come from per-species **care profiles** in
-`src/garden/data/care_profiles.yaml`, with citations to cooperative-extension
-publications. Each profile knows:
+Per-species **care profiles** (`src/garden/data/care_profiles.yaml`, cited to
+cooperative-extension sources) drive everything. The engine pairs each profile
+with your logged events + weather forecast:
 
-- **Water cadence** — normal days-between, hot-cadence, threshold temp, and
-  what rain depth counts as "a watering"
-- **Frost tolerance** — minimum safe temp (null if frost-hardy)
-- **Growth stages** (GDD-driven) — establishing / vegetative / flowering /
-  fruiting boundaries with stage-appropriate fertilizer mix and cadence
-- **GDD base temp** — used to accumulate degree-days from your weather
-  observations (tomato 10°C, lettuce 5°C, pepper 12°C, etc.)
-- **Container multiplier** — feeds and waters faster in containers / seed trays
-
-The engine pairs profiles with your logged events and the weather forecast:
-- last watering / last rain → next water due date (or hot cadence if forecast hot)
-- transplant date + accumulated GDD → current growth stage → fertilizer mix and cadence
-- container vs raised bed → multiplier on feed cadence
-- forecast min temp → frost warning if below profile threshold
-
-### Inspecting profiles
+- **Water** — next-due = last watering or significant rain + cadence; switches to a faster "hot" cadence when the forecast is hot.
+- **Frost** — warns if the 3-day forecast min drops below the species threshold.
+- **Fertilizer** — *nutrient-balance*, not just calendar (see below).
+- **Container kinds** (`container`/`flower_pot`/`indoor`/`seed_tray`) water + feed faster via a multiplier.
 
 ```bash
-garden profile list                      # all species the engine knows
-garden profile show "Garden Gem"         # merged profile for one taxon
-garden profile show "Solanum lycopersicum"
-garden show <plant>                      # adds current GDD + growth stage
+garden profile list                      # species the engine knows
+garden profile show "Improved Garden Gem"   # merged species+cultivar profile
 ```
 
-Adding a species = edit `src/garden/data/care_profiles.yaml`. Cultivars override
-species defaults field-by-field. No code changes.
+Add a species = edit `care_profiles.yaml`. Cultivar entries override species
+fields. No code changes.
 
-### Adding a new recommendation engine
+## Fertilizer & nutrients
 
-The `RecommendationEngine` Protocol lets you plug in ML, ET-based irrigation,
-USDA scrapers, etc. Drop a class in `src/garden/recommendations/`, add it to the
-`engines=[...]` list in `app.py`, and the orchestrator dedupes by `(plant_id,
-action)` keeping highest confidence.
+Fertilizer uses **growing-degree-day (GDD) growth stages** + a **nutrient
+budget**, not a fixed schedule:
 
-## Data exploration (notebook)
+1. GDD accumulates from your stored daily temps since transplant (base temp is per-species — tomato 10°C, lettuce 5°C…).
+2. GDD picks the current stage (establishing → vegetative → flowering → fruiting), each with a target N/P/K **g per week**.
+3. The engine sums **plant-available** nutrients you've applied (`mass × NPK% × release_fraction`) and recommends feeding when you're below target.
+
+`release_fraction` discounts slow-release inputs: synthetic granular/liquid ≈
+1.0, composted manure ≈ 0.2. So 1 cu ft of cow manure counts as the ~17 g of N
+that actually mineralizes this season, not its full label value.
 
 ```bash
-uv sync --group notebook                 # one-time
-uv run jupyter lab                       # open notebooks/explore.ipynb
+garden amendments                        # known --type keys + density + NPK + release_fraction
+garden log fertilized gem --type balanced_5_10_5 --quantity 50 --unit g
+garden log amended patio-north --type cow_manure --quantity 1 --unit cu-ft
 ```
 
-Or read the SQLite directly from anywhere:
+- `--type` must be a known amendment (`garden amendments`) **or** you must pass `--n-pct/--p-pct/--k-pct` for a custom one.
+- `--unit`: mass (`kg g lb oz`) or volume (`L ml gal fl-oz cu-ft cu-yd tsp tbsp cup`). Volume needs the amendment's density (in the catalog) to compute mass.
+- `--n-pct/--p-pct/--k-pct` override the catalog NPK (e.g. your bag's label differs).
+
+`garden show <plant>` reports GDD, current stage, and N/P/K applied vs target.
+
+## Adding a recommendation engine
+
+Implement the `RecommendationEngine` Protocol, drop the class in
+`src/garden/recommendations/`, add it to `engines=[...]` in `app.py`. The
+orchestrator dedupes by `(plant_id, action)`, keeping highest confidence — so
+new engines (ML, ET-based irrigation, USDA scrapers) are additive.
+
+## Data exploration
+
+```bash
+uv sync --group notebook
+uv run jupyter lab                       # notebooks/explore.ipynb
+```
+
+Or hit the SQLite directly:
 
 ```python
 import pandas as pd
 from sqlalchemy import create_engine
 engine = create_engine("sqlite:///garden-data/garden.sqlite")
-events = pd.read_sql("SELECT * FROM events", engine)
+pd.read_sql("SELECT * FROM events", engine)
 ```
 
 ## Strict mode
 
-`GARDEN_STRICT=1` disables fuzzy plant name matching (you must use the exact
-plant id, not a substring). Useful for scripting.
-
-```bash
-GARDEN_STRICT=1 garden log watered tomato-garden-gem-1 --amount-l 2.0
-```
+`GARDEN_STRICT=1` disables fuzzy plant matching (require exact ids) — useful for scripts.

@@ -81,22 +81,39 @@ uv run garden list
 uv run garden log transplant "Garden Gem" --to patio-north
 uv run garden log seed "Basil" --in patio-north
 uv run garden log watered gem --amount-l 2.0 --method base
-uv run garden log fertilized gem --product "Neptune's Harvest" --npk 2-3-1
+uv run garden log fertilized gem --type fish_emulsion --quantity 2 --unit tbsp
+uv run garden log amended patio-north --type cow_manure --quantity 1 --unit cu-ft
 uv run garden log harvested gem --weight-g 250 --count 8
-uv run garden log --help                   # all verbs auto-generated
+uv run garden log delete <id-prefix>        # fix mistakes (delete + re-log)
+uv run garden log --help                    # all verbs auto-generated
 
 # Settings
 uv run garden config show
 uv run garden config set name "Erich's Garden"
 
 # Reports + actions
-uv run garden show tomato-garden-gem-1
+uv run garden show tomato-garden-gem-1      # events, GDD, growth stage, nutrients, recs
 uv run garden status
-uv run garden weather                       # pulls Open-Meteo into observations
-uv run garden recommend                     # runs all engines, persists results
+uv run garden weather                       # fetch + show + store Open-Meteo data
+uv run garden recommend [--within 7]        # timeline of upcoming actions
+uv run garden profile show "Garden Gem"     # what the engine knows about a species
+uv run garden amendments                    # known fertilizer/amendment types
 ```
 
 Set `GARDEN_STRICT=1` to disable fuzzy plant matching.
+
+## Recommendations
+
+Per-species **care profiles** (`src/garden/data/care_profiles.yaml`, cited to
+cooperative-extension sources) drive water, frost, and fertilizer advice. The
+engine combines each profile with your logged events and the weather forecast:
+
+- **Water** — next-due from last watering or significant rain; faster cadence when the forecast is hot.
+- **Frost** — warns when the 3-day forecast dips below the species threshold.
+- **Fertilizer** — a **nutrient budget**, not a calendar. Growing-degree-days (from stored temps) pick the growth stage; each stage has a target N/P/K per week; the engine sums *plant-available* nutrients you've applied (`mass × NPK% × release_fraction`) and recommends feeding when you're below target. Slow-release inputs (composted manure ≈ 0.2) count for far less than synthetics (≈ 1.0).
+
+Every recommendation has a `due_at`, so `garden recommend` reads as a timeline.
+See [docs/CHEATSHEET.md](docs/CHEATSHEET.md) for the full command map.
 
 ## Architecture
 
@@ -128,9 +145,11 @@ someone actually wants it.
 
 ## Status
 
-**v0.2** (current): CLI, single SQLite store, Open-Meteo weather, rule-based recommendations.
+**v0.3** (current): CLI, single SQLite store, Open-Meteo weather, care-profile
+engine with GDD growth stages and nutrient-balance fertilizer (release-fraction
+aware). Live dashboard via the Quarto site that consumes this repo as a submodule.
 
 **v1** (planned): HTMX web UI, USDA guideline engine, OSM-based urban shading
-model, Alembic migrations.
+model, ET-based irrigation, Alembic migrations.
 
 **v2** (planned): Hardware sensors, ML recommendations, photo logging.
