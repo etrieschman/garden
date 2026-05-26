@@ -27,7 +27,12 @@ from garden.recommendations.profiles import (
 from garden.services.gdd import gdd_since
 
 # Locations that drain/leach faster get the container_multiplier applied.
-_CONTAINER_KINDS = {LocationKind.CONTAINER, LocationKind.INDOOR, LocationKind.SEED_TRAY}
+_CONTAINER_KINDS = {
+    LocationKind.CONTAINER,
+    LocationKind.INDOOR,
+    LocationKind.SEED_TRAY,
+    LocationKind.FLOWER_POT,
+}
 
 
 class CareProfileEngine:
@@ -251,9 +256,7 @@ def _stage_for_gdd(stages: list[FertilizeStage], gdd: float) -> FertilizeStage |
     return None
 
 
-def _container_multiplier(
-    plant: Plant, ctx: GardenContext, profile: CareProfile
-) -> float:
+def _container_multiplier(plant: Plant, ctx: GardenContext, profile: CareProfile) -> float:
     if not profile.fertilize:
         return 1.0
     location = ctx.locations.get(plant.location_id or "")

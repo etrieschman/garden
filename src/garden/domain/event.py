@@ -78,8 +78,16 @@ class TreatedDetails(BaseModel):
 
 
 class AmendedDetails(BaseModel):
-    added: str | None = Field(default=None, description="What was added.")
-    amount: str | None = Field(default=None, description="Amount with units.")
+    added: str | None = Field(
+        default=None, description="What was added (e.g. 'cow manure', 'compost')."
+    )
+    amount: str | None = Field(
+        default=None,
+        description="Free-form amount with units, e.g. '1 cu ft', '28L', '5kg', '2 inches'.",
+    )
+    npk: str | None = Field(
+        default=None, description="N-P-K ratio, e.g. '0.5-0.5-0.5' or '5-10-5'."
+    )
 
 
 class GerminatedDetails(BaseModel):

@@ -9,6 +9,7 @@ class LocationKind(StrEnum):
     HYDROPONIC = "hydroponic"
     INDOOR = "indoor"
     SEED_TRAY = "seed_tray"
+    FLOWER_POT = "flower_pot"
 
 
 class PlantStatus(StrEnum):
@@ -32,8 +33,8 @@ class EventType(StrEnum):
     FERTILIZED = "fertilized"
     PRUNED = "pruned"
     HARVESTED = "harvested"
-    TREATED = "treated"        # pest/disease treatment
-    AMENDED = "amended"        # soil amendment (bed-scoped)
-    OBSERVED = "observed"      # narrative note; structured data goes in Observation
+    TREATED = "treated"  # pest/disease treatment
+    AMENDED = "amended"  # soil amendment (bed-scoped)
+    OBSERVED = "observed"  # narrative note; structured data goes in Observation
     DIED = "died"
     REMOVED = "removed"
