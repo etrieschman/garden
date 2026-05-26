@@ -38,6 +38,12 @@ class FertilizeStage(BaseModel):
     `until_gdd` is the upper boundary: stage applies until cumulative GDD
     (since transplant or seeding) reaches this value. The last stage uses
     `until_gdd: null` to mean "rest of the plant's life."
+
+    Two recommendation modes:
+    - If `target_n_g_per_week` is set, the engine does **nutrient-balance**: it
+      sums N applied (via amended + fertilized events) since stage entry and
+      compares against `target * weeks_in_stage`.
+    - Otherwise it falls back to **cadence**: recommend every `cadence_days`.
     """
 
     name: str
@@ -45,6 +51,9 @@ class FertilizeStage(BaseModel):
     skip: bool = False                  # if True, no fertilizer recommendation
     cadence_days: int = 14
     preferred: str | None = None
+    target_n_g_per_week: float | None = None
+    target_p2o5_g_per_week: float | None = None
+    target_k2o_g_per_week: float | None = None
 
 
 class FertilizeProfile(BaseModel):

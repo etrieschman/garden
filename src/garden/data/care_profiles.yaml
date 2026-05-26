@@ -44,6 +44,9 @@ profiles:
       min_safe_temp_c: 5
     fertilize:
       container_multiplier: 1.5
+      # Per-plant nutrient targets (g/week) per stage. Rough numbers derived from
+      # Cornell's seasonal recommendation of ~75-100 lb N/acre for tomato (~9-12 g/m²),
+      # assuming 0.5 m² per plant and stage durations of ~6 / 6 / 8 weeks.
       stages:
         - name: establishing
           until_gdd: 100
@@ -51,14 +54,23 @@ profiles:
         - name: vegetative
           until_gdd: 500
           cadence_days: 14
+          target_n_g_per_week: 0.6
+          target_p2o5_g_per_week: 0.4
+          target_k2o_g_per_week: 0.5
           preferred: high-N (fish emulsion or 8-2-2) to push leafy growth
         - name: flowering
           until_gdd: 900
           cadence_days: 10
+          target_n_g_per_week: 0.4
+          target_p2o5_g_per_week: 0.6
+          target_k2o_g_per_week: 0.5
           preferred: balanced 5-10-5; ease off N once flowers appear
         - name: fruiting
           until_gdd: null
           cadence_days: 7
+          target_n_g_per_week: 0.5
+          target_p2o5_g_per_week: 0.5
+          target_k2o_g_per_week: 0.8
           preferred: balanced + K sidedress every other feed
     sources:
       - Cornell Cooperative Extension — Tomato Production Guide
@@ -76,6 +88,10 @@ profiles:
   # GDD stage boundaries are tightened per cultivar based on days-to-first-ripe
   # (assuming ~10 GDD/day in MA mid-season).
 
+  # Note: cultivar `fertilize.stages` replaces the species stages whole-list
+  # when present (no per-stage merge). So each cultivar that overrides stage
+  # boundaries must also carry its own target_n/p/k_g_per_week values.
+
   - scientific_name: Solanum lycopersicum
     cultivar: Improved Garden Gem
     common_name: Tomato
@@ -89,14 +105,23 @@ profiles:
         - name: vegetative
           until_gdd: 350              # earlier flower transition (50-55d to fruit)
           cadence_days: 14
+          target_n_g_per_week: 0.6
+          target_p2o5_g_per_week: 0.4
+          target_k2o_g_per_week: 0.5
           preferred: high-N (fish emulsion or 8-2-2)
         - name: flowering
           until_gdd: 550
           cadence_days: 10
+          target_n_g_per_week: 0.4
+          target_p2o5_g_per_week: 0.6
+          target_k2o_g_per_week: 0.5
           preferred: balanced 5-10-5; ease off N once flowers appear
         - name: fruiting
           until_gdd: null
           cadence_days: 7
+          target_n_g_per_week: 0.5
+          target_p2o5_g_per_week: 0.5
+          target_k2o_g_per_week: 0.8
           preferred: balanced + K sidedress every other feed
     sources:
       - UF Klee Lab — semi-determinate, 2-2.5oz elongated red fruit, 50-55d to first ripe
@@ -113,15 +138,24 @@ profiles:
         - name: vegetative
           until_gdd: 450
           cadence_days: 14
+          target_n_g_per_week: 0.6
+          target_p2o5_g_per_week: 0.4
+          target_k2o_g_per_week: 0.5
           preferred: high-N (fish emulsion or 8-2-2)
         - name: flowering
           until_gdd: 750              # 70-75d to fruit
           cadence_days: 10
+          target_n_g_per_week: 0.4
+          target_p2o5_g_per_week: 0.6
+          target_k2o_g_per_week: 0.5
           preferred: balanced 5-10-5
         - name: fruiting
-          # determinate — single concentrated set; one feed cycle is usually enough
+          # determinate — single concentrated set; lower ongoing N
           until_gdd: null
           cadence_days: 14
+          target_n_g_per_week: 0.3
+          target_p2o5_g_per_week: 0.5
+          target_k2o_g_per_week: 0.8
           preferred: balanced; K sidedress at first fruit set
     sources:
       - UF Klee Lab — determinate, 6oz round deep red fruit, 70-75d to first ripe
@@ -138,14 +172,24 @@ profiles:
         - name: vegetative
           until_gdd: 600
           cadence_days: 14
+          target_n_g_per_week: 0.6
+          target_p2o5_g_per_week: 0.4
+          target_k2o_g_per_week: 0.5
           preferred: high-N (fish emulsion or 8-2-2)
         - name: flowering
           until_gdd: 950              # 90-100d to first ripe
           cadence_days: 10
+          target_n_g_per_week: 0.4
+          target_p2o5_g_per_week: 0.6
+          target_k2o_g_per_week: 0.5
           preferred: balanced 5-10-5
         - name: fruiting
+          # indeterminate, heavy producer — slightly higher ongoing N for continuous fruiting
           until_gdd: null
           cadence_days: 7
+          target_n_g_per_week: 0.6
+          target_p2o5_g_per_week: 0.5
+          target_k2o_g_per_week: 0.9
           preferred: balanced + K sidedress every other feed
     sources:
       - UF Klee Lab — indeterminate, 8oz red fruit, 90-100d to first ripe (late bearer)

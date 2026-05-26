@@ -1,0 +1,119 @@
+# Soil amendments + fertilizers catalog.
+#
+# Each entry has:
+#   key:                 short identifier (used as `--type` value)
+#   display:             human-readable name
+#   kind:                amendment | fertilizer  (informational; both feed the
+#                        nutrient accumulator identically)
+#   kg_per_l:            bulk density. Required if users enter volume; ignored if
+#                        they enter mass. Typical values from extension-service
+#                        publications and engineering toolbox tables.
+#   npk:                 default N-P2O5-K2O percent by mass. Users can override
+#                        per-event with --n-pct / --p-pct / --k-pct (e.g. if
+#                        their bag label disagrees).
+#   notes:               brief context
+#   sources:             where the values came from
+#
+# Adding a new entry: just add to the list. CLI picks it up automatically.
+
+entries:
+  # ---- soil amendments (slow-release, structural) ----
+  - key: cow_manure
+    display: Cow manure (composted)
+    kind: amendment
+    kg_per_l: 0.60
+    npk: [0.5, 0.5, 0.5]
+    notes: Wet weight; raw manure can be 0.8-0.6-0.4. Slow-release.
+    sources:
+      - UC Davis ANR — Manure Production and Characteristics
+
+  - key: chicken_manure
+    display: Chicken manure (composted)
+    kind: amendment
+    kg_per_l: 0.55
+    npk: [3.0, 2.5, 1.5]
+    notes: Hotter than cow manure; use sparingly fresh.
+    sources:
+      - Penn State Extension — Composted Manure Analysis
+
+  - key: compost
+    display: Garden compost
+    kind: amendment
+    kg_per_l: 0.55
+    npk: [1.0, 1.0, 1.0]
+    notes: Typical mixed home compost; varies widely.
+    sources:
+      - Cornell Coop Ext — Composting at Home
+
+  - key: worm_castings
+    display: Worm castings (vermicast)
+    kind: amendment
+    kg_per_l: 0.70
+    npk: [1.0, 0.5, 0.5]
+    sources:
+      - OSU Extension — Vermicomposting
+
+  - key: peat_moss
+    display: Peat moss
+    kind: amendment
+    kg_per_l: 0.15
+    npk: [0.0, 0.0, 0.0]
+    notes: Negligible nutrients; for water retention and acidification.
+
+  - key: topsoil
+    display: Garden topsoil
+    kind: amendment
+    kg_per_l: 1.30
+    npk: [0.1, 0.05, 0.1]
+    notes: Variable; assume near-zero for nutrient accounting.
+
+  # ---- fertilizers (concentrated, fast-release) ----
+  - key: blood_meal
+    display: Blood meal
+    kind: fertilizer
+    kg_per_l: 0.60
+    npk: [12.0, 0.0, 0.0]
+    notes: Pure N source; rapid.
+    sources:
+      - "Organic Materials Review Institute — Blood meal datasheet"
+
+  - key: bone_meal
+    display: Bone meal
+    kind: fertilizer
+    kg_per_l: 0.70
+    npk: [3.0, 15.0, 0.0]
+    notes: Slow-release P; good for flowering/fruiting.
+
+  - key: fish_emulsion
+    display: Fish emulsion (5-1-1 concentrate)
+    kind: fertilizer
+    kg_per_l: 1.05
+    npk: [5.0, 1.0, 1.0]
+    notes: Diluted before application; track quantity of concentrate.
+
+  - key: balanced_5_10_5
+    display: Balanced 5-10-5 (granular)
+    kind: fertilizer
+    kg_per_l: 1.00
+    npk: [5.0, 10.0, 5.0]
+    notes: Generic balanced; many brands sell this ratio.
+
+  - key: balanced_10_10_10
+    display: Balanced 10-10-10 (granular)
+    kind: fertilizer
+    kg_per_l: 1.00
+    npk: [10.0, 10.0, 10.0]
+
+  - key: tomato_fertilizer_3_4_6
+    display: Tomato/vegetable fertilizer 3-4-6
+    kind: fertilizer
+    kg_per_l: 1.00
+    npk: [3.0, 4.0, 6.0]
+    notes: Lower-N formula; good for fruiting tomatoes/peppers.
+
+  - key: kelp_meal
+    display: Kelp meal
+    kind: fertilizer
+    kg_per_l: 0.40
+    npk: [1.0, 0.1, 2.0]
+    notes: Slow-release K + micronutrients.

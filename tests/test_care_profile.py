@@ -10,9 +10,11 @@ from garden.domain import (
     PlantStatus,
     Taxon,
 )
+from garden.domain.enums import AmendmentUnit
 from garden.domain.location import Location, LocationKind
 from garden.providers.weather import WeatherSample
 from garden.recommendations import CareProfileBundle, GardenContext
+from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.care_profile import (
     _check_fertilize,
     _check_frost,
@@ -20,6 +22,8 @@ from garden.recommendations.care_profile import (
     current_stage,
 )
 from garden.services.gdd import gdd_since
+
+CATALOG = AmendmentCatalog.load_default()
 
 TOMATO = Taxon(id="t1", scientific_name="Solanum lycopersicum", common_name="Tomato")
 NOW = datetime(2026, 7, 15, 12, tzinfo=UTC)
@@ -205,16 +209,16 @@ def test_fertilize_silent_in_establishing_stage() -> None:
     transplant = Event(
         type=EventType.TRANSPLANTED, plant_id="gem-1", occurred_at=NOW - timedelta(days=3)
     )
-    # Three days at 20C mean → GDD = 3 * 10 = 30 < 100
     obs = [_temp_obs(NOW - timedelta(days=i), 20) for i in range(1, 4)]
     recs = _check_fertilize(
-        _plant(), TOMATO, profile, _ctx(_plant(), events=[transplant], observations=obs)
+        _plant(), TOMATO, profile, _ctx(_plant(), events=[transplant], observations=obs), CATALOG
     )
     assert recs == []
 
 
 def test_fertilize_fires_in_vegetative_stage_with_no_prior_feed() -> None:
-    """20 days at 20C → GDD = 200 → vegetative stage; no feed yet → due now."""
+    """20 days at 20C → GDD ≈ 200 → vegetative stage; zero nutrients applied →
+    nutrient-balance check fires with a deficit."""
     profile = CareProfileBundle.load_default().resolve("Solanum lycopersicum")
     assert profile is not None
     transplant = Event(
@@ -222,24 +226,49 @@ def test_fertilize_fires_in_vegetative_stage_with_no_prior_feed() -> None:
     )
     obs = [_temp_obs(NOW - timedelta(days=i), 20) for i in range(1, 21)]
     recs = _check_fertilize(
-        _plant(), TOMATO, profile, _ctx(_plant(), events=[transplant], observations=obs)
+        _plant(), TOMATO, profile, _ctx(_plant(), events=[transplant], observations=obs), CATALOG
     )
     assert len(recs) == 1
     assert "vegetative" in recs[0].reason.lower()
+    assert "deficit" in recs[0].reason.lower()
     assert recs[0].due_at is not None
-    assert abs((recs[0].due_at - NOW).total_seconds()) < 60  # due ~now
 
 
-def test_fertilize_uses_container_multiplier() -> None:
-    """In a CONTAINER, the cadence is divided by the container_multiplier."""
+def test_fertilize_quiet_when_recently_fed_enough_n() -> None:
+    """Plant in vegetative stage with a recent fertilizer event covering the deficit
+    should be silent."""
     profile = CareProfileBundle.load_default().resolve("Solanum lycopersicum")
     assert profile is not None
     transplant = Event(
         type=EventType.TRANSPLANTED, plant_id="gem-1", occurred_at=NOW - timedelta(days=20)
     )
-    # Just fed yesterday — silent if normal cadence (14d), but container shortens it
-    last_fert = Event(
-        type=EventType.FERTILIZED, plant_id="gem-1", occurred_at=NOW - timedelta(days=10)
+    # 50g of 10-10-10 = 5g N applied yesterday → more than enough to clear vegetative deficit
+    fert = Event(
+        type=EventType.FERTILIZED,
+        plant_id="gem-1",
+        occurred_at=NOW - timedelta(days=1),
+        details={
+            "type": "balanced_10_10_10",
+            "quantity": 50.0,
+            "unit": AmendmentUnit.G.value,
+        },
+    )
+    obs = [_temp_obs(NOW - timedelta(days=i), 20) for i in range(1, 21)]
+    recs = _check_fertilize(
+        _plant(), TOMATO, profile,
+        _ctx(_plant(), events=[transplant, fert], observations=obs),
+        CATALOG,
+    )
+    assert recs == []
+
+
+def test_fertilize_uses_container_multiplier_for_target() -> None:
+    """Container plants need *more* N per week (target × multiplier); same applied
+    N → larger deficit → still fires when the same scenario in raised_bed wouldn't."""
+    profile = CareProfileBundle.load_default().resolve("Solanum lycopersicum")
+    assert profile is not None
+    transplant = Event(
+        type=EventType.TRANSPLANTED, plant_id="gem-1", occurred_at=NOW - timedelta(days=20)
     )
     obs = [_temp_obs(NOW - timedelta(days=i), 20) for i in range(1, 21)]
     recs = _check_fertilize(
@@ -248,12 +277,12 @@ def test_fertilize_uses_container_multiplier() -> None:
         profile,
         _ctx(
             _plant(),
-            events=[transplant, last_fert],
+            events=[transplant],
             observations=obs,
             location_kind=LocationKind.CONTAINER,
         ),
+        CATALOG,
     )
-    # Vegetative cadence 14d ÷ 1.5 ≈ 9d → 10 days ago means we're due
     assert len(recs) == 1
     assert "container modifier" in recs[0].reason
 

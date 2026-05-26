@@ -11,9 +11,11 @@ from rich.table import Table
 from garden.cli._app import app, console, garden_app
 from garden.domain import Recommendation
 from garden.recommendations import CareProfileBundle
+from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.care_profile import current_stage
 from garden.services import garden as garden_svc
 from garden.services import insights, logging, recommend
+from garden.services.nutrients import cumulative_nutrients
 
 
 @app.command("list")
@@ -73,10 +75,34 @@ def show(plant: str) -> None:
                 ", ".join(f"{k}={v}" for k, v in (e.details or {}).items()),
             )
         console.print(et)
-    # GDD + growth stage (if this plant's species has a profile with stages)
-    stage_label, gdd = _resolve_current_stage(ga, pl)
-    if stage_label is not None and gdd is not None:
-        console.print(f"  GDD since transplant: {gdd:.0f}  →  stage: [bold]{stage_label}[/bold]")
+    # GDD + growth stage + nutrient totals (if profile + stages exist)
+    nutrient_info = _resolve_plant_nutrition(ga, pl)
+    if nutrient_info is not None:
+        stage_label, gdd, applied, target = nutrient_info
+        console.print(
+            f"  GDD since transplant: {gdd:.0f}  →  stage: [bold]{stage_label}[/bold]"
+        )
+        if target is not None:
+            deficit_n = target.n_g - applied.n_g
+            deficit_label = (
+                f"deficit {deficit_n:+.1f}g"
+                if abs(deficit_n) > 0.05
+                else "on target"
+            )
+            console.print(
+                f"  N applied this stage: [bold]{applied.n_g:.1f}g[/bold] "
+                f"vs target {target.n_g:.1f}g  ({deficit_label})"
+            )
+            console.print(
+                f"  P₂O₅: {applied.p2o5_g:.1f}g / target {target.p2o5_g:.1f}g     "
+                f"K₂O: {applied.k2o_g:.1f}g / target {target.k2o_g:.1f}g"
+            )
+        else:
+            console.print(
+                f"  N applied this stage: [bold]{applied.n_g:.1f}g[/bold]   "
+                f"P₂O₅: {applied.p2o5_g:.1f}g   K₂O: {applied.k2o_g:.1f}g  "
+                f"[dim](no target set)[/dim]"
+            )
 
     if status.active_recommendations:
         console.print()
@@ -90,20 +116,55 @@ def show(plant: str) -> None:
         console.print(rt)
 
 
-def _resolve_current_stage(ga, pl) -> tuple[str | None, float | None]:
-    """Compute the plant's current growth stage from GDD; quiet on no profile."""
+def _resolve_plant_nutrition(ga, pl):
+    """Return (stage_label, gdd, applied_NutrientTotals, target_NutrientTotals | None)
+    or None if the plant has no profile/stage available."""
+    from garden.recommendations.care_profile import _stage_start_date, _stage_targets
+
     taxon = ga.storage.get_taxon(pl.taxon_id)
     if not taxon:
-        return None, None
+        return None
     bundle = CareProfileBundle.load_default()
     profile = bundle.resolve(taxon.scientific_name, taxon.cultivar)
     if not profile or not profile.fertilize or not profile.fertilize.stages:
-        return None, None
+        return None
     ctx = recommend.build_context(ga.storage, weather=None)
     stage, gdd = current_stage(pl, profile, ctx)
     if stage is None or gdd is None:
-        return None, None
-    return stage.name.replace("_", " "), gdd
+        return None
+
+    # Sum nutrients applied since this stage began
+    transplant = next(
+        (e.occurred_at for e in ctx.events_by_plant.get(pl.id, [])
+         if e.type.value == "transplanted"),
+        None,
+    )
+    observations = (
+        ctx.observations_by_location.get(pl.location_id, []) if pl.location_id else []
+    )
+    base_temp = profile.gdd.base_temp_c if profile.gdd else 10.0
+    stage_start = (
+        _stage_start_date(profile, stage, transplant, observations, base_temp)
+        if transplant is not None
+        else None
+    )
+    bed_events = (
+        ctx.bed_events_by_location.get(pl.location_id, []) if pl.location_id else []
+    )
+    applied = cumulative_nutrients(
+        ctx.events_by_plant.get(pl.id, []) + bed_events,
+        AmendmentCatalog.load_default(),
+        since=stage_start,
+    )
+
+    target = None
+    if stage.target_n_g_per_week is not None and stage_start is not None:
+        from garden.recommendations.care_profile import _container_multiplier
+        multiplier = _container_multiplier(pl, ctx, profile)
+        weeks = max(0.0, (ctx.now - stage_start).total_seconds() / (86400 * 7))
+        target = _stage_targets(stage, weeks, multiplier)
+
+    return stage.name.replace("_", " "), gdd, applied, target
 
 
 @app.command("status")
@@ -179,6 +240,27 @@ def _due_label(rec: Recommendation, now: datetime) -> str:
     if days == 1:
         return "tomorrow".rjust(10)
     return f"in {days}d".rjust(10)
+
+
+@app.command("amendments")
+def cmd_amendments() -> None:
+    """List the known amendment + fertilizer types (the `--type` choices for `garden log amended/fertilized`)."""
+    catalog = AmendmentCatalog.load_default()
+    t = Table(title=f"Amendments + fertilizers ({len(catalog.entries)} entries)")
+    t.add_column("key")
+    t.add_column("name")
+    t.add_column("kind")
+    t.add_column("kg/L", justify="right")
+    t.add_column("NPK", justify="right")
+    for e in catalog.entries:
+        t.add_row(
+            e.key,
+            e.display,
+            e.kind,
+            f"{e.kg_per_l:g}",
+            f"{e.npk[0]:g}-{e.npk[1]:g}-{e.npk[2]:g}",
+        )
+    console.print(t)
 
 
 @app.command("weather")

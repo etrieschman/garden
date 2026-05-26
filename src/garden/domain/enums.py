@@ -25,6 +25,32 @@ class PlantStatus(StrEnum):
     REMOVED = "removed"
 
 
+class AmendmentUnit(StrEnum):
+    """Units for soil amendments and fertilizers.
+
+    Mass units convert directly to kg. Volume units convert to L, then to mass
+    via the amendment's bulk density (which is required for nutrient math on
+    volume entries).
+    """
+
+    # mass
+    KG = "kg"
+    G = "g"
+    LB = "lb"
+    OZ = "oz"
+    # volume — coarse
+    L = "L"
+    ML = "ml"
+    GAL = "gal"
+    FL_OZ = "fl-oz"
+    CU_FT = "cu-ft"
+    CU_YD = "cu-yd"
+    # volume — small (liquid fertilizers)
+    TSP = "tsp"
+    TBSP = "tbsp"
+    CUP = "cup"
+
+
 class EventType(StrEnum):
     SEEDED = "seeded"
     GERMINATED = "germinated"

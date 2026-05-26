@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from garden.domain import EventType, LocationKind, Plant, Recommendation, Taxon
+from garden.domain import EventType, LocationKind, Observation, Plant, Recommendation, Taxon
+from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.base import GardenContext
 from garden.recommendations.profiles import (
     CareProfile,
@@ -25,6 +26,7 @@ from garden.recommendations.profiles import (
     FertilizeStage,
 )
 from garden.services.gdd import gdd_since
+from garden.services.nutrients import NutrientTotals, cumulative_nutrients
 
 # Locations that drain/leach faster get the container_multiplier applied.
 _CONTAINER_KINDS = {
@@ -38,8 +40,13 @@ _CONTAINER_KINDS = {
 class CareProfileEngine:
     name = "care-profile"
 
-    def __init__(self, bundle: CareProfileBundle | None = None) -> None:
+    def __init__(
+        self,
+        bundle: CareProfileBundle | None = None,
+        amendments: AmendmentCatalog | None = None,
+    ) -> None:
         self.bundle = bundle or CareProfileBundle.load_default()
+        self.amendments = amendments or AmendmentCatalog.load_default()
 
     def generate(self, ctx: GardenContext) -> list[Recommendation]:
         recs: list[Recommendation] = []
@@ -52,7 +59,7 @@ class CareProfileEngine:
                 continue
             recs.extend(_check_water(plant, taxon, profile, ctx))
             recs.extend(_check_frost(plant, taxon, profile, ctx))
-            recs.extend(_check_fertilize(plant, taxon, profile, ctx))
+            recs.extend(_check_fertilize(plant, taxon, profile, ctx, self.amendments))
         return recs
 
 
@@ -176,7 +183,11 @@ def _check_frost(
 
 
 def _check_fertilize(
-    plant: Plant, taxon: Taxon, profile: CareProfile, ctx: GardenContext
+    plant: Plant,
+    taxon: Taxon,
+    profile: CareProfile,
+    ctx: GardenContext,
+    catalog: AmendmentCatalog,
 ) -> list[Recommendation]:
     if not profile.fertilize or not profile.fertilize.stages:
         return []
@@ -191,11 +202,90 @@ def _check_fertilize(
     if stage is None or stage.skip:
         return []
 
-    # Container kinds need feeds more frequently
     multiplier = _container_multiplier(plant, ctx, profile)
-    effective_cadence = max(1, round(stage.cadence_days / multiplier))
-
     events = ctx.events_by_plant.get(plant.id, [])
+
+    # Nutrient-balance mode: stage has explicit per-week N target.
+    if stage.target_n_g_per_week is not None:
+        return _check_fertilize_by_nutrients(
+            plant, taxon, profile, ctx, stage, gdd, observations,
+            base_temp, transplant_date, multiplier, events, catalog,
+        )
+
+    # Cadence fallback: stage didn't declare a target.
+    return _check_fertilize_by_cadence(
+        plant, taxon, profile, ctx, stage, gdd, transplant_date, multiplier, events,
+    )
+
+
+def _check_fertilize_by_nutrients(
+    plant: Plant,
+    taxon: Taxon,
+    profile: CareProfile,
+    ctx: GardenContext,
+    stage: FertilizeStage,
+    gdd: float,
+    observations: list[Observation],
+    base_temp: float,
+    transplant_date: datetime,
+    multiplier: float,
+    events: list,
+    catalog: AmendmentCatalog,
+) -> list[Recommendation]:
+    stage_start = _stage_start_date(profile, stage, transplant_date, observations, base_temp)
+    # Plant-specific events + bed-scoped amendments at the same location both
+    # contribute to nutrient totals for this plant.
+    bed_events = ctx.bed_events_by_location.get(plant.location_id or "", [])
+    applied = cumulative_nutrients(events + bed_events, catalog, since=stage_start)
+    weeks_in_stage = max(0.0, (ctx.now - stage_start).total_seconds() / (86400 * 7))
+    target = _stage_targets(stage, weeks_in_stage, multiplier)
+    deficit_n_g = target.n_g - applied.n_g
+
+    # Below ~0.2 g of N deficit, leave the user alone; that's noise.
+    if deficit_n_g < 0.2:
+        return []
+
+    # Roughly when will the deficit appear? Now if already past, else later.
+    due_at = ctx.now
+
+    parts = [
+        f"{stage.name.replace('_', ' ').capitalize()} stage (GDD {gdd:.0f}, "
+        f"{(ctx.now - transplant_date).days}d since transplant)",
+        f"N applied {applied.n_g:.1f}g vs target {target.n_g:.1f}g over "
+        f"{weeks_in_stage:.1f} weeks (deficit {deficit_n_g:.1f}g)",
+    ]
+    if multiplier != 1.0:
+        parts.append(f"container modifier ×{multiplier:g}")
+    if stage.preferred:
+        parts.append(f"prefer: {stage.preferred}")
+    if profile.sources:
+        parts.append(profile.sources[0])
+
+    return [
+        Recommendation(
+            plant_id=plant.id,
+            location_id=plant.location_id,
+            action="fertilize",
+            reason=". ".join(parts) + ".",
+            engine="care-profile",
+            confidence=0.9,
+            due_at=due_at,
+        )
+    ]
+
+
+def _check_fertilize_by_cadence(
+    plant: Plant,
+    taxon: Taxon,
+    profile: CareProfile,
+    ctx: GardenContext,
+    stage: FertilizeStage,
+    gdd: float,
+    transplant_date: datetime,
+    multiplier: float,
+    events: list,
+) -> list[Recommendation]:
+    effective_cadence = max(1, round(stage.cadence_days / multiplier))
     fertilizes_after_transplant = [
         e.occurred_at
         for e in events
@@ -205,13 +295,11 @@ def _check_fertilize(
         last_fert = max(fertilizes_after_transplant)
         due_at = last_fert + timedelta(days=effective_cadence)
     else:
-        # First feed of this stage: due as soon as the (non-skip) stage was reached.
-        # We approximate stage entry as "now" if we just crossed into it.
         due_at = ctx.now
 
-    parts: list[str] = [
-        f"{stage.name.replace('_', ' ').capitalize()} stage (GDD {gdd:.0f} "
-        f"since transplant {(ctx.now - transplant_date).days}d ago)"
+    parts = [
+        f"{stage.name.replace('_', ' ').capitalize()} stage (GDD {gdd:.0f}, "
+        f"{(ctx.now - transplant_date).days}d since transplant)"
     ]
     if fertilizes_after_transplant:
         days_since = (ctx.now - last_fert).total_seconds() / 86400
@@ -236,6 +324,51 @@ def _check_fertilize(
             due_at=due_at,
         )
     ]
+
+
+def _stage_targets(stage: FertilizeStage, weeks: float, multiplier: float) -> NutrientTotals:
+    """Cumulative nutrient targets over `weeks`, optionally accelerated for containers."""
+    return NutrientTotals(
+        n_g=(stage.target_n_g_per_week or 0) * weeks * multiplier,
+        p2o5_g=(stage.target_p2o5_g_per_week or 0) * weeks * multiplier,
+        k2o_g=(stage.target_k2o_g_per_week or 0) * weeks * multiplier,
+    )
+
+
+def _stage_start_date(
+    profile: CareProfile,
+    current_stage: FertilizeStage,
+    transplant_date: datetime,
+    observations: list[Observation],
+    base_temp: float,
+) -> datetime:
+    """When did the current stage begin? At the prior stage's GDD boundary."""
+    if not profile.fertilize or not profile.fertilize.stages:
+        return transplant_date
+    idx = profile.fertilize.stages.index(current_stage)
+    if idx == 0:
+        return transplant_date
+    prior = profile.fertilize.stages[idx - 1]
+    if prior.until_gdd is None:
+        return transplant_date
+    return _gdd_milestone(observations, transplant_date, base_temp, prior.until_gdd) or transplant_date
+
+
+def _gdd_milestone(
+    observations: list[Observation],
+    since: datetime,
+    base_temp_c: float,
+    target_gdd: float,
+) -> datetime | None:
+    """Date when cumulative GDD first reached `target_gdd`. None if never."""
+    total = 0.0
+    for obs in sorted(observations, key=lambda o: o.occurred_at):
+        if obs.metric != "temp_c_mean" or obs.value_numeric is None or obs.occurred_at < since:
+            continue
+        total += max(0.0, obs.value_numeric - base_temp_c)
+        if total >= target_gdd:
+            return obs.occurred_at
+    return None
 
 
 # ---------- internals ----------

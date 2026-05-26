@@ -33,6 +33,11 @@ def build_context(
             plant_id=plant.id, since=history_since
         )
 
+    bed_events_by_location: dict[str, list[Event]] = {}
+    for loc_id in locations:
+        all_at_loc = storage.list_events(location_id=loc_id, since=history_since)
+        bed_events_by_location[loc_id] = [e for e in all_at_loc if e.plant_id is None]
+
     forecast_by_location: dict[str, list[WeatherSample]] = {}
     if weather is not None:
         start: date = (now - timedelta(days=3)).date()
@@ -52,6 +57,7 @@ def build_context(
         locations=locations,
         taxa=taxa,
         events_by_plant=events_by_plant,
+        bed_events_by_location=bed_events_by_location,
         observations_by_location=obs_by_loc,
         forecast_by_location=forecast_by_location,
     )

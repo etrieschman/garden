@@ -18,8 +18,32 @@ from pydantic import BaseModel
 from garden.cli._app import console, garden_app, log_app
 from garden.domain import EventType, PlantStatus
 from garden.domain.event import EVENT_DETAILS
+from garden.recommendations.amendments import AmendmentCatalog
 from garden.services import garden as garden_svc
 from garden.services import logging
+
+
+def _validate_amendment_type(event_type: EventType, details: dict[str, Any]) -> None:
+    """For AMENDED / FERTILIZED, refuse unknown amendment keys unless the user
+    supplies NPK overrides. Keeps the catalog the single source of typo-checked
+    truth without locking users out of new amendments."""
+    if event_type not in (EventType.AMENDED, EventType.FERTILIZED):
+        return
+    type_key = details.get("type")
+    if not type_key:
+        return
+    catalog = AmendmentCatalog.load_default()
+    if catalog.get(type_key) is not None:
+        return
+    has_override = any(details.get(k) is not None for k in ("n_pct", "p_pct", "k_pct"))
+    if has_override:
+        return
+    known = ", ".join(catalog.keys())
+    raise typer.BadParameter(
+        f"unknown amendment {type_key!r}. "
+        f"Known: {known}. For a new amendment, also pass --n-pct / --p-pct / --k-pct.",
+        param_hint="--type",
+    )
 
 
 def _resolve_target(storage: Any, target: str) -> tuple[str | None, str | None]:
@@ -53,6 +77,7 @@ def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callabl
         notes = kwargs.pop("notes", None)
         details_raw = {k: v for k, v in kwargs.items() if v is not None}
         details = model.model_validate(details_raw).model_dump(exclude_none=True)
+        _validate_amendment_type(event_type, details)
         occurred = datetime.fromisoformat(when) if when else None
         ga = garden_app()
         plant_query, location_id = _resolve_target(ga.storage, target)

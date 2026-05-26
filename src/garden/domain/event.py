@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from garden.domain.enums import EventType
+from garden.domain.enums import AmendmentUnit, EventType
 
 # ---------- the Event row itself ----------
 
@@ -53,9 +53,21 @@ class WaterDetails(BaseModel):
 
 
 class FertilizeDetails(BaseModel):
-    product: str | None = Field(default=None, description="Fertilizer name/brand.")
-    npk: str | None = Field(default=None, description="N-P-K ratio, e.g. 5-10-5.")
-    amount_g: float | None = Field(default=None, description="Grams applied.")
+    type: str | None = Field(
+        default=None,
+        description="Amendment key from `garden amendments` (e.g. 'fish_emulsion', 'balanced_5_10_5').",
+    )
+    quantity: float | None = Field(default=None, description="Amount in `unit`.")
+    unit: AmendmentUnit | None = Field(default=None, description="Unit of `quantity`.")
+    n_pct: float | None = Field(
+        default=None, description="% N override (defaults to catalog NPK[0])."
+    )
+    p_pct: float | None = Field(
+        default=None, description="% P2O5 override (defaults to catalog NPK[1])."
+    )
+    k_pct: float | None = Field(
+        default=None, description="% K2O override (defaults to catalog NPK[2])."
+    )
 
 
 class HarvestDetails(BaseModel):
@@ -78,15 +90,20 @@ class TreatedDetails(BaseModel):
 
 
 class AmendedDetails(BaseModel):
-    added: str | None = Field(
-        default=None, description="What was added (e.g. 'cow manure', 'compost')."
-    )
-    amount: str | None = Field(
+    type: str | None = Field(
         default=None,
-        description="Free-form amount with units, e.g. '1 cu ft', '28L', '5kg', '2 inches'.",
+        description="Amendment key from `garden amendments` (e.g. 'cow_manure', 'compost').",
     )
-    npk: str | None = Field(
-        default=None, description="N-P-K ratio, e.g. '0.5-0.5-0.5' or '5-10-5'."
+    quantity: float | None = Field(default=None, description="Amount in `unit`.")
+    unit: AmendmentUnit | None = Field(default=None, description="Unit of `quantity`.")
+    n_pct: float | None = Field(
+        default=None, description="% N override (defaults to catalog NPK[0])."
+    )
+    p_pct: float | None = Field(
+        default=None, description="% P2O5 override (defaults to catalog NPK[1])."
+    )
+    k_pct: float | None = Field(
+        default=None, description="% K2O override (defaults to catalog NPK[2])."
     )
 
 

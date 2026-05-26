@@ -19,6 +19,10 @@ class GardenContext:
     locations: dict[str, Location] = field(default_factory=dict)
     taxa: dict[str, Taxon] = field(default_factory=dict)
     events_by_plant: dict[str, list[Event]] = field(default_factory=dict)
+    # Bed-scoped events (plant_id is None, location_id matches the bed). These
+    # credit every plant in that bed for nutrient accounting (an amendment
+    # applied to the whole bed feeds everything growing in it).
+    bed_events_by_location: dict[str, list[Event]] = field(default_factory=dict)
     observations_by_location: dict[str, list[Observation]] = field(default_factory=dict)
     forecast_by_location: dict[str, list[WeatherSample]] = field(default_factory=dict)
 
