@@ -9,7 +9,7 @@ import typer
 from rich.table import Table
 
 from garden.cli._app import app, console, garden_app
-from garden.domain import Recommendation
+from garden.domain import INDOOR_LOCATION_KINDS, Recommendation
 from garden.recommendations import CareProfileBundle
 from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.care_profile import current_stage
@@ -269,11 +269,21 @@ def cmd_weather(
         bool, typer.Option("--no-store", help="Display only; don't write observations.")
     ] = False,
 ) -> None:
-    """Fetch and display weather for every bed (and store observations by default)."""
+    """Fetch and display weather for every outdoor bed (and store observations by default)."""
     ga = garden_app()
-    locs = [loc for loc in ga.storage.list_locations() if loc.lat and loc.lon]
+    all_locs = ga.storage.list_locations()
+    # Indoor kinds (seed tray, indoor) get no outdoor weather — skip them even
+    # if they carry a lat/lon (they inherit the garden default on creation).
+    locs = [
+        loc
+        for loc in all_locs
+        if loc.lat and loc.lon and loc.kind not in INDOOR_LOCATION_KINDS
+    ]
+    skipped = [loc.id for loc in all_locs if loc.kind in INDOOR_LOCATION_KINDS]
+    if skipped:
+        console.print(f"[dim]skipping indoor: {', '.join(skipped)}[/dim]")
     if not locs:
-        console.print("[yellow]no beds have lat/lon[/yellow]")
+        console.print("[yellow]no outdoor beds with lat/lon[/yellow]")
         return
     start = date.today() - timedelta(days=days_back)
     end = date.today() + timedelta(days=days_forward)

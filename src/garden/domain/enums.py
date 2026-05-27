@@ -12,6 +12,13 @@ class LocationKind(StrEnum):
     FLOWER_POT = "flower_pot"
 
 
+# Location kinds with no exposure to outdoor weather. Plants here don't get
+# fetched weather, don't accumulate GDD or rain, and don't get water/frost
+# recommendations — the gardener controls their light and water directly
+# (e.g. a seed tray under a grow light).
+INDOOR_LOCATION_KINDS = frozenset({LocationKind.INDOOR, LocationKind.SEED_TRAY})
+
+
 class PlantStatus(StrEnum):
     SEEDED = "seeded"
     GERMINATED = "germinated"

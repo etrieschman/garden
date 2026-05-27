@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from garden.domain import (
+    INDOOR_LOCATION_KINDS,
     EventType,
     LocationKind,
     Observation,
@@ -64,6 +65,13 @@ class CareProfileEngine:
                 continue
             profile = self.bundle.resolve(taxon.scientific_name, taxon.cultivar)
             if not profile:
+                continue
+            # Indoor plants (seed tray under a grow light, etc.) get no
+            # outdoor-weather recommendations — the gardener controls their
+            # water and light directly. Fertilizer is GDD-gated and naturally
+            # stays silent indoors (no outdoor temps → no GDD → establishing).
+            location = ctx.locations.get(plant.location_id or "")
+            if location is not None and location.kind in INDOOR_LOCATION_KINDS:
                 continue
             recs.extend(_check_water(plant, taxon, profile, ctx))
             recs.extend(_check_frost(plant, taxon, profile, ctx))
@@ -141,8 +149,15 @@ def _check_water(
     if not profile.water or not plant.location_id:
         return []
 
-    events = ctx.events_by_plant.get(plant.id, [])
-    water_dates = [e.occurred_at for e in events if e.type == EventType.WATERED]
+    # Watering counts whether logged on the plant directly OR on its bed — a
+    # bed watering wets every plant in it (no splitting, unlike nutrients).
+    plant_events = ctx.events_by_plant.get(plant.id, [])
+    bed_events = ctx.bed_events_by_location.get(plant.location_id, [])
+    water_dates = [
+        e.occurred_at
+        for e in (*plant_events, *bed_events)
+        if e.type == EventType.WATERED
+    ]
     last_water = max(water_dates, default=None)
 
     forecast = ctx.forecast_by_location.get(plant.location_id, [])

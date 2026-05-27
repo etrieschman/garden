@@ -337,6 +337,45 @@ def test_plant_direct_fertilizer_counts_in_full() -> None:
     assert plant_available_nutrients(p2, ctx, CATALOG).n_g == 0.0  # neighbor unaffected
 
 
+def test_indoor_location_gets_no_recommendations() -> None:
+    """A plant in a seed tray (indoor) gets no outdoor-weather recommendations,
+    even though it would otherwise trigger a 'no water on record' rec."""
+    from garden.recommendations import CareProfileEngine
+
+    plant = Plant(id="gem-1", taxon_id="t1", location_id="tray", status=PlantStatus.SEEDED)
+    ctx = GardenContext(
+        now=NOW,
+        plants=[plant],
+        locations={"tray": Location(id="tray", name="tray", kind=LocationKind.SEED_TRAY)},
+        taxa={"t1": TOMATO},
+        events_by_plant={"gem-1": []},
+    )
+    assert CareProfileEngine().generate(ctx) == []
+
+
+def test_bed_watering_credits_plants_in_bed() -> None:
+    """Watering logged on the bed (not a specific plant) counts as watering every
+    plant in that bed — no splitting, since watering wets everything."""
+    profile = CareProfileBundle.load_default().resolve("Solanum lycopersicum")
+    assert profile is not None
+    plant = Plant(id="gem-1", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
+    bed_water = Event(
+        type=EventType.WATERED, location_id="bed", occurred_at=NOW - timedelta(days=1)
+    )
+    ctx = GardenContext(
+        now=NOW,
+        plants=[plant],
+        locations={"bed": Location(id="bed", name="bed", kind=LocationKind.RAISED_BED)},
+        taxa={"t1": TOMATO},
+        events_by_plant={"gem-1": []},
+        bed_events_by_location={"bed": [bed_water]},
+    )
+    recs = _check_water(plant, TOMATO, profile, ctx)
+    # Watered (via bed) 1 day ago, cadence 5d → next-due is in the future, quiet now.
+    assert len(recs) == 1 and recs[0].due_at is not None
+    assert recs[0].due_at > NOW
+
+
 def test_release_fraction_discounts_slow_release_amendments() -> None:
     """A bed-scoped composted-manure amendment counts at the manure's
     `release_fraction` rate (rule-of-thumb ~20% for cow manure), not at its
