@@ -35,3 +35,10 @@ notebooks/.ipynb_checkpoints/
 .vscode/
 .idea/
 .DS_Store
+
+# Quarto
+_site/
+.quarto/
+
+/.quarto/
+**/*.quarto_ipynb

@@ -1,0 +1,196 @@
+---
+title: "Garden"
+jupyter: python3
+execute:
+  echo: false
+  warning: false
+---
+
+A live view of my home garden. Source code: [github.com/etrieschman/garden](https://github.com/etrieschman/garden).
+
+```{python}
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pandas as pd
+import plotly.express as px
+
+from garden.app import GardenApp
+
+INSTANCE_DIR = Path("garden-data").resolve()
+ga = GardenApp.open(INSTANCE_DIR)
+NOW = datetime.now(UTC)
+```
+
+## `{python} ga.meta.name`
+
+```{python}
+locations = ga.storage.list_locations()
+plants = ga.storage.list_plants()
+print(f"{len(locations)} bed(s), {len(plants)} plant(s).")
+```
+
+## Beds
+
+```{python}
+beds_df = pd.DataFrame([
+    {
+        "id": loc.id,
+        "kind": loc.kind.value,
+        "area (m²)": round(loc.dimensions.area_m2, 2) if loc.dimensions and loc.dimensions.area_m2 else None,
+        "lat,lon": f"{loc.lat:.4f},{loc.lon:.4f}" if loc.lat and loc.lon else "—",
+        "substrate": loc.substrate.medium if loc.substrate else "—",
+    }
+    for loc in locations
+])
+beds_df
+```
+
+## Plants
+
+```{python}
+taxa = {t.id: t for t in ga.storage.list_taxa()}
+plants_df = pd.DataFrame([
+    {
+        "id": p.id,
+        "taxon": taxa[p.taxon_id].display_name if p.taxon_id in taxa else p.taxon_id,
+        "bed": p.location_id or "—",
+        "status": p.status.value,
+        "planted": p.planted_at.strftime("%Y-%m-%d") if p.planted_at else "—",
+    }
+    for p in plants
+])
+plants_df if not plants_df.empty else "No plants yet."
+```
+
+## Recommendations (next 7 days)
+
+```{python}
+from garden.services import recommend
+recs = recommend.refresh_recommendations(ga.storage, ga.engines, weather=ga.weather)
+cutoff = NOW + timedelta(days=7)
+soon = sorted(
+    [r for r in recs if r.due_at is None or r.due_at <= cutoff],
+    key=lambda r: r.due_at or NOW + timedelta(days=365),
+)
+
+def _due_label(due):
+    if due is None:
+        return "no date"
+    days = round((due - NOW).total_seconds() / 86400)
+    if days < 0: return f"{-days}d late"
+    if days == 0: return "TODAY"
+    if days == 1: return "tomorrow"
+    return f"in {days}d"
+
+recs_df = pd.DataFrame([
+    {
+        "when": _due_label(r.due_at),
+        "action": r.action,
+        "target": r.plant_id or r.location_id or "—",
+        "reason": r.reason,
+    }
+    for r in soon
+])
+recs_df if not recs_df.empty else "Nothing in the next 7 days."
+```
+
+## Weather — cumulative since transplant
+
+Each bed's rainfall and growing-degree-day clocks start the day the first plant
+was transplanted into it (going outdoors), not from an arbitrary window.
+
+```{python}
+bed_start = {}
+for loc in locations:
+    transplant_dates = [
+        e.occurred_at
+        for e in ga.storage.list_events(location_id=loc.id)
+        if e.type.value == "transplanted"
+    ]
+    if transplant_dates:
+        bed_start[loc.id] = min(transplant_dates)
+
+obs = []
+for loc in locations:
+    if loc.id not in bed_start or not (loc.lat and loc.lon):
+        continue
+    for o in ga.storage.list_observations(location_id=loc.id, since=bed_start[loc.id]):
+        if o.value_numeric is None or o.source is None or not o.source.startswith("provider:"):
+            continue
+        obs.append({
+            "date": o.occurred_at,
+            "metric": o.metric,
+            "value": o.value_numeric,
+            "bed": loc.id,
+        })
+
+weather_df = pd.DataFrame(obs)
+```
+
+```{python}
+if weather_df.empty:
+    "No weather observations yet — run `garden weather`."
+else:
+    rain = weather_df[weather_df.metric == "rain_mm"].sort_values("date").copy()
+    rain["cumulative_mm"] = rain.groupby("bed")["value"].cumsum()
+    fig = px.line(
+        rain,
+        x="date", y="cumulative_mm", color="bed",
+        labels={"cumulative_mm": "cumulative rain (mm)", "date": ""},
+        title="Cumulative rainfall",
+    )
+    fig.update_layout(height=320, margin=dict(t=40, b=20), hovermode="x unified")
+    fig.show()
+```
+
+```{python}
+if not weather_df.empty:
+    gdd = weather_df[weather_df.metric == "temp_c_mean"].sort_values("date").copy()
+    if not gdd.empty:
+        gdd["gdd_day"] = (gdd["value"] - 10).clip(lower=0)
+        gdd["cumulative_gdd"] = gdd.groupby("bed")["gdd_day"].cumsum()
+        fig = px.line(
+            gdd,
+            x="date", y="cumulative_gdd", color="bed",
+            labels={"cumulative_gdd": "cumulative GDD (base 10°C)", "date": ""},
+            title="Cumulative growing degree days",
+        )
+        fig.update_layout(height=320, margin=dict(t=40, b=20), hovermode="x unified")
+        fig.show()
+```
+
+## Growth-stage tracker
+
+```{python}
+from garden.recommendations import CareProfileBundle
+from garden.recommendations.care_profile import current_stage
+from garden.services.recommend import build_context
+
+bundle = CareProfileBundle.load_default()
+ctx = build_context(ga.storage, weather=None)
+
+rows = []
+for plant in plants:
+    taxon = taxa.get(plant.taxon_id)
+    if not taxon:
+        continue
+    profile = bundle.resolve(taxon.scientific_name, taxon.cultivar)
+    if not profile:
+        continue
+    stage, gdd = current_stage(plant, profile, ctx)
+    if stage is None or gdd is None:
+        continue
+    rows.append({
+        "plant": plant.id,
+        "taxon": taxon.display_name,
+        "GDD": round(gdd),
+        "stage": stage.name.replace("_", " "),
+    })
+
+pd.DataFrame(rows) if rows else "No plants with growth-stage data yet (need temp observations after transplant)."
+```
+
+---
+
+*Page rendered at `{python} NOW.strftime("%Y-%m-%d %H:%M UTC")`.*

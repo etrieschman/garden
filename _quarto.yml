@@ -1,0 +1,32 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+
+website:
+  title: "Garden"
+  description: "A live view of my home garden"
+  open-graph: true
+  navbar:
+    background: "#2d4a3e"
+    foreground: "#ffffff"
+    right:
+      - icon: github
+        href: https://github.com/etrieschman/garden
+        aria-label: GitHub
+    page-footer:
+      background: "#1f3d2b"
+      foreground: "#ffffff"
+      left: "© 2026 Erich Trieschman"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    linkcolor: "#1a5fb4"
+    smooth-scroll: true
+    code-fold: true
+    code-tools: false
+    link-external-newwindow: true
+    link-external-icon: true

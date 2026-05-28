@@ -30,6 +30,12 @@ notebook = [
     "pandas>=2.2",
     "matplotlib>=3.9",
 ]
+docs = [
+    "ipykernel>=6.29",
+    "jupyter>=1.1",
+    "pandas>=2.2",
+    "plotly>=5.22",
+]
 
 [build-system]
 requires = ["hatchling"]
