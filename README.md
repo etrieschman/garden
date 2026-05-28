@@ -154,7 +154,8 @@ someone actually wants it.
 
 **v0.3** (current): CLI, single SQLite store, Open-Meteo weather, care-profile
 engine with GDD growth stages and nutrient-balance fertilizer (release-fraction
-aware). Live dashboard via the Quarto site that consumes this repo as a submodule.
+aware). Live dashboard at [etrieschman.github.io/garden](https://etrieschman.github.io/garden/)
+rendered from this repo via Quarto + GitHub Actions on every push.
 
 **v1** (planned): HTMX web UI, USDA guideline engine, OSM-based urban shading
 model, ET-based irrigation, Alembic migrations.
