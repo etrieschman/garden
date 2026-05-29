@@ -120,3 +120,63 @@ def test_terminal_event_marks_plant_and_refuses_further_events(
 
     types = [e.type for e in storage.list_events(plant_id=plant.id)]
     assert EventType.WATERED not in types
+
+
+def test_label_resolves_in_find_plants(storage: SQLiteStorage) -> None:
+    """A plant's label is matched by `find_plants` so gardeners can refer to
+    plants by friendly names rather than slugified taxon ids."""
+    bed = _bed(storage)
+    taxon = storage.upsert_taxon(
+        Taxon(id="t1", scientific_name="Ocimum basilicum", common_name="basil")
+    )
+    storage.create_plant(
+        Plant(
+            id="b1",
+            taxon_id=taxon.id,
+            location_id=bed.id,
+            status=PlantStatus.GROWING,
+            label="kitchen window basil",
+        )
+    )
+    hits = storage.find_plants("kitchen window")
+    assert [p.id for p in hits] == ["b1"]
+
+
+def test_photo_path_persists_on_event(storage: SQLiteStorage) -> None:
+    bed = _bed(storage)
+    taxon = storage.upsert_taxon(
+        Taxon(id="t1", scientific_name="Solanum lycopersicum", common_name="tomato")
+    )
+    plant = storage.create_plant(
+        Plant(id="p1", taxon_id=taxon.id, location_id=bed.id, status=PlantStatus.GROWING)
+    )
+    logging_svc.log_event(
+        storage,
+        plant_query=plant.id,
+        type=EventType.OBSERVED,
+        photo_path="/photos/basil-yellowing.jpg",
+        notes="yellow leaf spotted",
+    )
+    [event] = storage.list_events(plant_id=plant.id)
+    assert event.photo_path == "/photos/basil-yellowing.jpg"
+
+
+def test_dismiss_recommendation_lookup(storage: SQLiteStorage) -> None:
+    """`find_recommendations_by_prefix` powers `garden recommend dismiss`."""
+    from garden.domain import Recommendation
+
+    rec = storage.create_recommendation(
+        Recommendation(
+            plant_id=None,
+            location_id="bed-a",
+            action="water",
+            reason="soil dry",
+            engine="care-profile",
+        )
+    )
+    matches = storage.find_recommendations_by_prefix(str(rec.id)[:8])
+    assert len(matches) == 1
+    assert matches[0].id == rec.id
+
+    storage.dismiss_recommendation(rec.id)
+    assert storage.list_recommendations() == []  # dismissed by default hidden

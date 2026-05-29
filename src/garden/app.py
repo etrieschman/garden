@@ -17,7 +17,7 @@ from pathlib import Path
 
 from garden.providers.catalog import CatalogProvider, LocalCatalog
 from garden.providers.weather import OpenMeteoProvider, WeatherProvider
-from garden.recommendations import CareProfileEngine, RecommendationEngine
+from garden.recommendations import RecommendationEngine, build_engines
 from garden.settings import GardenMeta
 from garden.storage.base import Storage
 from garden.storage.sqlite import SQLiteStorage
@@ -53,7 +53,7 @@ class GardenApp:
             storage=storage,
             catalog=LocalCatalog(),
             weather=OpenMeteoProvider(),
-            engines=[CareProfileEngine()],
+            engines=build_engines(meta.engines),
             instance_dir=inst,
         )
 

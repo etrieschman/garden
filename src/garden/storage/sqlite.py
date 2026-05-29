@@ -54,6 +54,7 @@ class SQLiteStorage:
             ("plants", "terminal_at", "TIMESTAMP"),
             ("plants", "terminal_cause", "VARCHAR"),
             ("events", "photo_path", "VARCHAR"),
+            ("garden", "engines", "JSON"),
         ]
         with self.engine.begin() as c:
             for table, column, sqltype in wanted:
@@ -106,11 +107,13 @@ class SQLiteStorage:
             row = s.get(GardenRow, 1)
             if row is None:
                 return GardenMeta()
+            defaults = GardenMeta.model_fields["engines"].default
             return GardenMeta(
                 name=row.name,
                 default_lat=row.default_lat,
                 default_lon=row.default_lon,
                 timezone=row.timezone,
+                engines=row.engines if row.engines else list(defaults),
             )
 
     def save_garden(self, meta: GardenMeta) -> None:
@@ -124,6 +127,7 @@ class SQLiteStorage:
                         default_lat=meta.default_lat,
                         default_lon=meta.default_lon,
                         timezone=meta.timezone,
+                        engines=list(meta.engines),
                     )
                 )
             else:
@@ -131,6 +135,7 @@ class SQLiteStorage:
                 row.default_lat = meta.default_lat
                 row.default_lon = meta.default_lon
                 row.timezone = meta.timezone
+                row.engines = list(meta.engines)
 
     # ---- taxa ----
     def upsert_taxon(self, taxon: Taxon) -> Taxon:
@@ -239,6 +244,7 @@ class SQLiteStorage:
                 .where(
                     or_(
                         PlantRow.id.ilike(q),
+                        PlantRow.label.ilike(q),
                         TaxonRow.cultivar.ilike(q),
                         TaxonRow.common_name.ilike(q),
                         TaxonRow.scientific_name.ilike(q),
@@ -361,6 +367,13 @@ class SQLiteStorage:
             row = s.get(RecommendationRow, str(rec_id))
             if row:
                 row.dismissed_at = datetime.now(UTC)
+
+    def find_recommendations_by_prefix(self, id_prefix: str) -> list[Recommendation]:
+        with self.Session() as s:
+            stmt = select(RecommendationRow).where(
+                RecommendationRow.id.like(f"{id_prefix}%")
+            )
+            return [r.to_domain() for r in s.scalars(stmt)]
 
     def clear_undismissed_recommendations(self) -> None:
         """Delete every recommendation the user hasn't dismissed. Used to make

@@ -50,6 +50,7 @@ class GardenRow(Base):
     default_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     default_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     timezone: Mapped[str] = mapped_column(String, default="America/New_York")
+    engines: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
 
 class TaxonRow(Base):

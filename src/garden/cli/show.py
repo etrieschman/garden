@@ -8,13 +8,63 @@ from typing import Annotated
 import typer
 from rich.table import Table
 
-from garden.cli._app import app, console, garden_app
-from garden.domain import INDOOR_LOCATION_KINDS, Recommendation
+from garden.cli._app import app, console, garden_app, recommend_app
+from garden.domain import INDOOR_LOCATION_KINDS, MetricKind, Recommendation
 from garden.recommendations import CareProfileBundle
 from garden.recommendations.amendments import AmendmentCatalog
 from garden.recommendations.care_profile import current_stage
 from garden.services import garden as garden_svc
-from garden.services import insights, logging, recommend
+from garden.services import insights, logging, recommend, snapshot
+
+
+@app.command("today")
+def cmd_today(
+    no_weather: Annotated[
+        bool, typer.Option(help="Skip weather fetch (offline).")
+    ] = False,
+    upcoming: Annotated[
+        int,
+        typer.Option(
+            "--upcoming",
+            help="How many days of upcoming actions to also show.",
+        ),
+    ] = 7,
+) -> None:
+    """One-screen 'what should I do today?' view."""
+    ga = garden_app()
+    weather = None if no_weather else ga.weather
+    snap = snapshot.get_snapshot(
+        ga.storage, ga.engines, weather=weather, upcoming_window_days=upcoming
+    )
+    console.print(
+        f"[bold]{ga.meta.name}[/bold]  "
+        f"[dim]as of {snap.now:%Y-%m-%d %H:%M}[/dim]"
+    )
+    console.print(
+        f"  outdoor: [bold]{len(snap.outdoor_plants)}[/bold]   "
+        f"indoor: [bold]{len(snap.indoor_plants)}[/bold]   "
+        f"terminal: [dim]{len(snap.terminal_plants)}[/dim]"
+    )
+    console.print()
+
+    if snap.today_actions:
+        console.print(f"[bold red]Today[/bold red] ({len(snap.today_actions)}):")
+        for r in snap.today_actions:
+            console.print(
+                f"  [bold]{_due_label(r, snap.now)}[/bold]  "
+                f"{r.action:<14} {r.plant_id or r.location_id or '—':<24} {r.reason}"
+            )
+    else:
+        console.print("[bold green]Today:[/bold green] nothing scheduled.")
+    console.print()
+
+    if snap.upcoming_actions:
+        console.print(f"[bold]Next {upcoming} days[/bold] ({len(snap.upcoming_actions)}):")
+        for r in snap.upcoming_actions:
+            console.print(
+                f"  {_due_label(r, snap.now)}  "
+                f"{r.action:<14} {r.plant_id or r.location_id or '—':<24} {r.reason}"
+            )
 
 
 @app.command("list")
@@ -191,8 +241,8 @@ def status() -> None:
         console.print(rt)
 
 
-@app.command("recommend")
-def cmd_recommend(
+@recommend_app.command("list")
+def cmd_recommend_list(
     within: Annotated[
         int, typer.Option("--within", help="Show recommendations due within N days.")
     ] = 7,
@@ -201,7 +251,7 @@ def cmd_recommend(
         bool, typer.Option("--all", help="Show every rec regardless of due date.")
     ] = False,
 ) -> None:
-    """Run recommendation engines and show what's coming, sorted by due date."""
+    """Refresh engines and list what's coming, sorted by due date."""
     ga = garden_app()
     weather = None if no_weather else ga.weather
     recs = recommend.refresh_recommendations(ga.storage, ga.engines, weather=weather)
@@ -221,9 +271,38 @@ def cmd_recommend(
         return
     for r in visible:
         console.print(
-            f"  [bold]{_due_label(r, now)}[/bold]  "
+            f"  [dim]{str(r.id)[:8]}[/dim]  [bold]{_due_label(r, now)}[/bold]  "
             f"{r.action:<16} {r.plant_id or r.location_id or '—':<28} {r.reason}"
         )
+
+
+@recommend_app.command("dismiss")
+def cmd_recommend_dismiss(
+    id_prefix: Annotated[
+        str,
+        typer.Argument(
+            help="Recommendation id or unique prefix (see `garden recommend list`)."
+        ),
+    ],
+) -> None:
+    """Dismiss a recommendation by id-prefix; it won't be re-suggested."""
+    ga = garden_app()
+    matches = ga.storage.find_recommendations_by_prefix(id_prefix)
+    if not matches:
+        console.print(f"[red]✗[/red] no recommendation matches {id_prefix!r}")
+        raise typer.Exit(code=1)
+    if len(matches) > 1:
+        console.print(
+            f"[yellow]![/yellow] {id_prefix!r} is ambiguous ({len(matches)} matches). "
+            "Use more characters of the id."
+        )
+        raise typer.Exit(code=1)
+    rec = matches[0]
+    ga.storage.dismiss_recommendation(rec.id)
+    target = rec.plant_id or rec.location_id or "—"
+    console.print(
+        f"[green]✓[/green] dismissed {str(rec.id)[:8]}: {rec.action} on {target}"
+    )
 
 
 def _due_label(rec: Recommendation, now: datetime) -> str:
@@ -238,6 +317,66 @@ def _due_label(rec: Recommendation, now: datetime) -> str:
     if days == 1:
         return "tomorrow".rjust(10)
     return f"in {days}d".rjust(10)
+
+
+@app.command("harvest")
+def cmd_harvest(
+    year: Annotated[
+        int | None,
+        typer.Option("--year", help="Filter to a single calendar year."),
+    ] = None,
+    plant: Annotated[
+        str | None,
+        typer.Option("--plant", help="Filter to one plant."),
+    ] = None,
+) -> None:
+    """Sum every harvested event into per-taxon weight + count totals."""
+    from collections import defaultdict
+
+    from garden.domain import EventType
+
+    ga = garden_app()
+    events = [
+        e for e in ga.storage.list_events(plant_id=plant)
+        if e.type == EventType.HARVESTED
+        and (year is None or e.occurred_at.year == year)
+    ]
+    if not events:
+        scope = f"{plant!r}" if plant else (f"year {year}" if year else "all time")
+        console.print(f"[dim]no harvest events for {scope}[/dim]")
+        return
+
+    plant_to_taxon = {p.id: p.taxon_id for p in ga.storage.list_plants()}
+    taxa = {t.id: t for t in ga.storage.list_taxa()}
+    totals: dict[str, dict[str, float]] = defaultdict(lambda: {"grams": 0.0, "count": 0.0})
+    for e in events:
+        taxon_id = plant_to_taxon.get(e.plant_id or "", "—")
+        t = totals[taxon_id]
+        t["grams"] += float(e.details.get("weight_g") or 0.0)
+        t["count"] += float(e.details.get("count") or 0)
+
+    title = f"Harvest summary"
+    if year:
+        title += f" — {year}"
+    if plant:
+        title += f" — {plant}"
+    tbl = Table(title=title)
+    tbl.add_column("taxon")
+    tbl.add_column("# harvests", justify="right")
+    tbl.add_column("total grams", justify="right")
+    tbl.add_column("total count", justify="right")
+    plant_count: dict[str, int] = defaultdict(int)
+    for e in events:
+        plant_count[plant_to_taxon.get(e.plant_id or "", "—")] += 1
+    for taxon_id, t in sorted(totals.items(), key=lambda kv: -kv[1]["grams"]):
+        taxon = taxa.get(taxon_id)
+        tbl.add_row(
+            taxon.display_name if taxon else taxon_id,
+            str(plant_count[taxon_id]),
+            f"{t['grams']:.0f}",
+            f"{t['count']:.0f}",
+        )
+    console.print(tbl)
 
 
 @app.command("amendments")
@@ -350,17 +489,17 @@ def cmd_weather(
         )
         for s in samples:
             for metric, value, unit in (
-                ("rain_mm", s.rain_mm, "mm"),
-                ("temp_c_mean", s.temp_c_mean, "C"),
-                ("temp_c_min", s.temp_c_min, "C"),
-                ("temp_c_max", s.temp_c_max, "C"),
-                ("sunshine_hours", s.sunshine_hours, "h"),
+                (MetricKind.RAIN_MM, s.rain_mm, "mm"),
+                (MetricKind.TEMP_C_MEAN, s.temp_c_mean, "C"),
+                (MetricKind.TEMP_C_MIN, s.temp_c_min, "C"),
+                (MetricKind.TEMP_C_MAX, s.temp_c_max, "C"),
+                (MetricKind.SUNSHINE_HOURS, s.sunshine_hours, "h"),
             ):
                 if value is None:
                     continue
                 logging.log_observation(
                     ga.storage,
-                    metric=metric,
+                    metric=metric.value,
                     value_numeric=value,
                     unit=unit,
                     location_id=loc.id,

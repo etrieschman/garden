@@ -4,7 +4,7 @@ GDD = sum over days of `max(0, daily_mean_temp_c - base_temp_c)`. Each species
 has its own base temp (10°C for tomato, 5°C for lettuce, etc.). Cold days
 contribute nothing; warm days pile up fast.
 
-Inputs are `Observation` rows with `metric="temp_c_mean"` (populated by
+Inputs are `Observation` rows with `metric=MetricKind.TEMP_C_MEAN` (populated by
 `garden weather`). One observation per day per location.
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from garden.domain import Observation
+from garden.domain import MetricKind, Observation
 
 
 def gdd_since(
@@ -30,7 +30,7 @@ def gdd_since(
     end = now or datetime.now(since.tzinfo)
     total = 0.0
     for obs in observations:
-        if obs.metric != "temp_c_mean":
+        if obs.metric != MetricKind.TEMP_C_MEAN.value:
             continue
         if obs.value_numeric is None:
             continue

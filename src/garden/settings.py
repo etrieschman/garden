@@ -14,3 +14,4 @@ class GardenMeta(BaseModel):
     default_lat: float | None = None
     default_lon: float | None = None
     timezone: str = "America/New_York"
+    engines: list[str] = ["care-profile"]

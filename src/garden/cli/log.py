@@ -46,6 +46,51 @@ def _validate_amendment_type(event_type: EventType, details: dict[str, Any]) -> 
     )
 
 
+_FANOUT_BLOCKED = {EventType.DIED, EventType.REMOVED}
+
+
+def _fan_out_to_bed(
+    ga: Any,
+    bed_id: str,
+    event_type: EventType,
+    occurred_at: datetime | None,
+    details: dict[str, Any],
+    notes: str | None,
+    photo_path: str | None = None,
+) -> None:
+    """Log `event_type` against every alive plant in `bed_id`. Used by `--all`."""
+    if event_type in _FANOUT_BLOCKED:
+        raise typer.BadParameter(
+            f"`--all` is not allowed for {event_type.value} — terminal events "
+            "must target individual plants."
+        )
+    bed = ga.storage.get_location(bed_id)
+    if bed is None:
+        raise typer.BadParameter(
+            f"`--all` requires the target to be a bed; {bed_id!r} is not a known bed."
+        )
+    targets = [p for p in ga.storage.list_plants(location_id=bed.id) if p.is_alive]
+    if not targets:
+        console.print(f"[yellow]![/yellow] no alive plants in {bed.id!r} — nothing to log")
+        return
+    for plant in targets:
+        logging.log_event(
+            ga.storage,
+            plant_query=plant.id,
+            location_id=bed.id,
+            type=event_type,
+            occurred_at=occurred_at,
+            details=details,
+            notes=notes,
+            photo_path=photo_path,
+        )
+    suffix = f"  {details}" if details else ""
+    console.print(
+        f"[green]✓[/green] Logged {event_type.value} for [bold]{len(targets)}[/bold] "
+        f"plant(s) in [bold]{bed.id}[/bold]{suffix}"
+    )
+
+
 def _resolve_target(storage: Any, target: str) -> tuple[str | None, str | None]:
     """Resolve a positional target to (plant_query, location_id).
 
@@ -75,11 +120,18 @@ def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callabl
         target = kwargs.pop("target")
         when = kwargs.pop("when", None)
         notes = kwargs.pop("notes", None)
+        photo = kwargs.pop("photo", None)
+        fan_out = kwargs.pop("all", False)
         details_raw = {k: v for k, v in kwargs.items() if v is not None}
         details = model.model_validate(details_raw).model_dump(exclude_none=True)
         _validate_amendment_type(event_type, details)
         occurred = datetime.fromisoformat(when) if when else None
         ga = garden_app()
+
+        if fan_out:
+            _fan_out_to_bed(ga, target, event_type, occurred, details, notes, photo)
+            return
+
         plant_query, location_id = _resolve_target(ga.storage, target)
         try:
             e = logging.log_event(
@@ -90,6 +142,7 @@ def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callabl
                 occurred_at=occurred,
                 details=details,
                 notes=notes,
+                photo_path=photo,
             )
         except ValueError as err:
             raise typer.BadParameter(str(err)) from err
@@ -117,6 +170,27 @@ def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callabl
             kind=inspect.Parameter.KEYWORD_ONLY,
             default=typer.Option(None, "--notes", "-n", help="Free-form note."),
             annotation=str | None,
+        ),
+        inspect.Parameter(
+            "photo",
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=typer.Option(
+                None, "--photo", help="Path to a photo to attach to this event."
+            ),
+            annotation=str | None,
+        ),
+        inspect.Parameter(
+            "all",
+            kind=inspect.Parameter.KEYWORD_ONLY,
+            default=typer.Option(
+                False,
+                "--all",
+                help=(
+                    "Target must be a bed; fan this event out to every alive plant in it. "
+                    "Not allowed for died/removed."
+                ),
+            ),
+            annotation=bool,
         ),
     ]
     for fname, finfo in model.model_fields.items():
@@ -291,6 +365,10 @@ def log_seed(
         str | None, typer.Option(help="ISO timestamp; defaults to now.")
     ] = None,
     notes: Annotated[str | None, typer.Option("--notes", "-n")] = None,
+    label: Annotated[
+        str | None,
+        typer.Option(help="Friendly name you'll use to refer to this plant."),
+    ] = None,
 ) -> None:
     """Log seeding (creates a Plant in status=seeded)."""
     ga = garden_app()
@@ -302,6 +380,7 @@ def log_seed(
         location_id=where,
         status=PlantStatus.SEEDED,
         planted_at=occurred,
+        label=label,
     )
     logging.log_event(
         ga.storage,
@@ -311,6 +390,7 @@ def log_seed(
         location_id=where,
         notes=notes,
     )
+    suffix = f" [dim]({label!r})[/dim]" if label else ""
     console.print(
-        f"[green]🌱[/green] Seeded {tx.display_name} → [bold]{plant.id}[/bold]"
+        f"[green]🌱[/green] Seeded {tx.display_name} → [bold]{plant.id}[/bold]{suffix}"
     )

@@ -12,7 +12,7 @@ class Observation(BaseModel):
     """
 
     id: UUID = Field(default_factory=uuid4)
-    metric: str  # e.g. "rain_mm", "soil_moisture_pct", "temp_c", "height_cm", "leaf_color"
+    metric: str  # prefer values from `MetricKind`; free string for legacy/ad-hoc
     value_numeric: float | None = None
     value_text: str | None = None
     unit: str | None = None

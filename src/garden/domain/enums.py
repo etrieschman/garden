@@ -19,6 +19,17 @@ class LocationKind(StrEnum):
 INDOOR_LOCATION_KINDS = frozenset({LocationKind.INDOOR, LocationKind.SEED_TRAY})
 
 
+# Location kinds that drain/leach faster than in-ground beds. The
+# care-profile engine applies a per-profile `container_multiplier` to
+# water + fertilizer cadences for plants in any of these.
+CONTAINER_LOCATION_KINDS = frozenset({
+    LocationKind.CONTAINER,
+    LocationKind.INDOOR,
+    LocationKind.SEED_TRAY,
+    LocationKind.FLOWER_POT,
+})
+
+
 class PlantStatus(StrEnum):
     """Lifecycle phase of a plant.
 
@@ -65,6 +76,24 @@ class AmendmentUnit(StrEnum):
     CUP = "cup"
 
 
+class MetricKind(StrEnum):
+    """Controlled vocabulary for `Observation.metric`.
+
+    The DB column stays a free string so legacy and ad-hoc metrics keep
+    working, but new code should use these enum values. Renderers (the
+    website's weather charts, the GDD service) compare against `.value`,
+    so adding a new metric here is the only place a name needs to change.
+    """
+
+    RAIN_MM = "rain_mm"
+    TEMP_C_MEAN = "temp_c_mean"
+    TEMP_C_MIN = "temp_c_min"
+    TEMP_C_MAX = "temp_c_max"
+    SUNSHINE_HOURS = "sunshine_hours"
+    SOIL_MOISTURE_PCT = "soil_moisture_pct"
+    HEIGHT_CM = "height_cm"
+
+
 class EventType(StrEnum):
     SEEDED = "seeded"
     GERMINATED = "germinated"
@@ -72,6 +101,9 @@ class EventType(StrEnum):
     WATERED = "watered"
     FERTILIZED = "fertilized"
     PRUNED = "pruned"
+    STAKED = "staked"  # tied / trellised / supported
+    POLLINATED = "pollinated"  # hand-pollination
+    CHECKED = "checked"  # I looked at it and nothing else to log
     HARVESTED = "harvested"
     TREATED = "treated"  # pest/disease treatment
     AMENDED = "amended"  # soil amendment (bed-scoped)

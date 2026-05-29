@@ -1,7 +1,9 @@
 from garden.domain.enums import (
+    CONTAINER_LOCATION_KINDS,
     INDOOR_LOCATION_KINDS,
     EventType,
     LocationKind,
+    MetricKind,
     PlantStatus,
 )
 from garden.domain.event import EVENT_EFFECTS, Event, PlantEffect
@@ -12,6 +14,7 @@ from garden.domain.recommendation import Recommendation
 from garden.domain.taxon import Taxon
 
 __all__ = [
+    "CONTAINER_LOCATION_KINDS",
     "EVENT_EFFECTS",
     "INDOOR_LOCATION_KINDS",
     "Dimensions",
@@ -19,6 +22,7 @@ __all__ = [
     "EventType",
     "Location",
     "LocationKind",
+    "MetricKind",
     "Observation",
     "Plant",
     "PlantEffect",

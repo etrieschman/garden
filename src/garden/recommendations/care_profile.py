@@ -18,9 +18,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from garden.domain import (
+    CONTAINER_LOCATION_KINDS,
     INDOOR_LOCATION_KINDS,
     EventType,
-    LocationKind,
+    MetricKind,
     Observation,
     Plant,
     Recommendation,
@@ -35,15 +36,6 @@ from garden.recommendations.profiles import (
 )
 from garden.services.gdd import gdd_since
 from garden.services.nutrients import NutrientTotals, cumulative_nutrients
-
-# Locations that drain/leach faster get the container_multiplier applied.
-_CONTAINER_KINDS = {
-    LocationKind.CONTAINER,
-    LocationKind.INDOOR,
-    LocationKind.SEED_TRAY,
-    LocationKind.FLOWER_POT,
-}
-
 
 class CareProfileEngine:
     name = "care-profile"
@@ -425,7 +417,7 @@ def _gdd_milestone(
     """Date when cumulative GDD first reached `target_gdd`. None if never."""
     total = 0.0
     for obs in sorted(observations, key=lambda o: o.occurred_at):
-        if obs.metric != "temp_c_mean" or obs.value_numeric is None or obs.occurred_at < since:
+        if obs.metric != MetricKind.TEMP_C_MEAN.value or obs.value_numeric is None or obs.occurred_at < since:
             continue
         total += max(0.0, obs.value_numeric - base_temp_c)
         if total >= target_gdd:
@@ -455,6 +447,6 @@ def _container_multiplier(plant: Plant, ctx: GardenContext, profile: CareProfile
     if not profile.fertilize:
         return 1.0
     location = ctx.locations.get(plant.location_id or "")
-    if location is None or location.kind not in _CONTAINER_KINDS:
+    if location is None or location.kind not in CONTAINER_LOCATION_KINDS:
         return 1.0
     return profile.fertilize.container_multiplier

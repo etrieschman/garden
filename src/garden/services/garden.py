@@ -111,6 +111,7 @@ def add_plant(
     status: PlantStatus = PlantStatus.SEEDED,
     planted_at: datetime | None = None,
     suffix: str | None = None,
+    label: str | None = None,
 ) -> Plant:
     """Create a plant. Auto-IDs by taxon + ordinal so multiple plants don't clash."""
     base = _slug(taxon.common_name or taxon.scientific_name, taxon.cultivar or "")
@@ -131,6 +132,7 @@ def add_plant(
         taxon_id=taxon.id,
         location_id=location_id,
         status=status,
+        label=label,
         planted_at=planted_at or datetime.now(UTC).replace(tzinfo=None),
     )
     return storage.create_plant(plant)

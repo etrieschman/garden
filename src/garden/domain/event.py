@@ -126,11 +126,30 @@ class ObservedDetails(BaseModel):
     `Observation` rows, not Event details."""
 
 
+class StakedDetails(BaseModel):
+    method: str | None = Field(
+        default=None, description="How (e.g. 'tomato cage', 'bamboo stake', 'trellis tie')."
+    )
+
+
+class PollinatedDetails(BaseModel):
+    method: str | None = Field(
+        default=None, description="How (e.g. 'brush', 'shake', 'q-tip')."
+    )
+
+
+class CheckedDetails(BaseModel):
+    """Marker that you looked at this plant — no other action."""
+
+
 EVENT_DETAILS: dict[EventType, type[BaseModel]] = {
     EventType.WATERED: WaterDetails,
     EventType.FERTILIZED: FertilizeDetails,
     EventType.HARVESTED: HarvestDetails,
     EventType.PRUNED: PruneDetails,
+    EventType.STAKED: StakedDetails,
+    EventType.POLLINATED: PollinatedDetails,
+    EventType.CHECKED: CheckedDetails,
     EventType.TREATED: TreatedDetails,
     EventType.AMENDED: AmendedDetails,
     EventType.GERMINATED: GerminatedDetails,
