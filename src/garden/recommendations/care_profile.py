@@ -19,11 +19,11 @@ from datetime import datetime, timedelta
 
 from garden.domain import (
     INDOOR_LOCATION_KINDS,
+    TERMINAL_PLANT_STATUSES,
     EventType,
     LocationKind,
     Observation,
     Plant,
-    PlantStatus,
     Recommendation,
     Taxon,
 )
@@ -79,9 +79,6 @@ class CareProfileEngine:
         return recs
 
 
-_DEAD_STATUSES = {PlantStatus.DEAD, PlantStatus.REMOVED}
-
-
 # ---------- public helpers (used by `garden show <plant>`) ----------
 
 
@@ -118,7 +115,7 @@ def _living_plants_in_bed(ctx: GardenContext, location_id: str) -> int:
     return sum(
         1
         for p in ctx.plants
-        if p.location_id == location_id and p.status not in _DEAD_STATUSES
+        if p.location_id == location_id and p.status not in TERMINAL_PLANT_STATUSES
     )
 
 

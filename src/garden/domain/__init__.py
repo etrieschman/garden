@@ -1,5 +1,6 @@
 from garden.domain.enums import (
     INDOOR_LOCATION_KINDS,
+    TERMINAL_PLANT_STATUSES,
     EventType,
     LocationKind,
     PlantStatus,
@@ -13,6 +14,7 @@ from garden.domain.taxon import Taxon
 
 __all__ = [
     "INDOOR_LOCATION_KINDS",
+    "TERMINAL_PLANT_STATUSES",
     "Dimensions",
     "Event",
     "EventType",

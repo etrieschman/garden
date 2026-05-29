@@ -32,6 +32,15 @@ class PlantStatus(StrEnum):
     REMOVED = "removed"
 
 
+# Terminal plant statuses — plants in one of these are no longer in the
+# garden. They get no recommendations, refuse new events, and are hidden
+# from current-state views (plants table, growth-stage tracker, …). Treat
+# this as the single source of truth: prefer `p.status in TERMINAL_PLANT_STATUSES`
+# over checking PlantStatus.DEAD directly, so adding a new terminal state later
+# is a one-line change.
+TERMINAL_PLANT_STATUSES = frozenset({PlantStatus.DEAD, PlantStatus.REMOVED})
+
+
 class AmendmentUnit(StrEnum):
     """Units for soil amendments and fertilizers.
 

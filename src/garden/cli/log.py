@@ -81,15 +81,18 @@ def _build_log_command(event_type: EventType, model: type[BaseModel]) -> Callabl
         occurred = datetime.fromisoformat(when) if when else None
         ga = garden_app()
         plant_query, location_id = _resolve_target(ga.storage, target)
-        e = logging.log_event(
-            ga.storage,
-            plant_query=plant_query,
-            location_id=location_id,
-            type=event_type,
-            occurred_at=occurred,
-            details=details,
-            notes=notes,
-        )
+        try:
+            e = logging.log_event(
+                ga.storage,
+                plant_query=plant_query,
+                location_id=location_id,
+                type=event_type,
+                occurred_at=occurred,
+                details=details,
+                notes=notes,
+            )
+        except ValueError as err:
+            raise typer.BadParameter(str(err)) from err
         suffix = f"  {details}" if details else ""
         target_label = e.plant_id or e.location_id or target
         console.print(
@@ -185,15 +188,18 @@ def log_transplant(
         plant.status = PlantStatus.TRANSPLANTED
         ga.storage.update_plant(plant)
 
-    e = logging.log_event(
-        ga.storage,
-        plant_query=plant.id,
-        type=EventType.TRANSPLANTED,
-        occurred_at=occurred,
-        location_id=to,
-        from_location_id=from_bed,
-        notes=notes,
-    )
+    try:
+        e = logging.log_event(
+            ga.storage,
+            plant_query=plant.id,
+            type=EventType.TRANSPLANTED,
+            occurred_at=occurred,
+            location_id=to,
+            from_location_id=from_bed,
+            notes=notes,
+        )
+    except ValueError as err:
+        raise typer.BadParameter(str(err)) from err
     console.print(
         f"[green]🪴[/green] Logged transplant of [bold]{plant.id}[/bold] → "
         f"[bold]{to}[/bold] at {e.occurred_at:%Y-%m-%d %H:%M}"

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from garden.domain import Event, EventType, Observation, PlantStatus
+from garden.domain import TERMINAL_PLANT_STATUSES, Event, EventType, Observation, PlantStatus
 from garden.services.garden import resolve_plant
 from garden.storage.base import Storage
 
@@ -30,6 +30,12 @@ def log_event(
     plant_id: str | None = None
     if plant_query:
         plant = resolve_plant(storage, plant_query)
+        if plant.status in TERMINAL_PLANT_STATUSES:
+            raise ValueError(
+                f"plant {plant.id!r} is {plant.status.value} — no further events can be "
+                "logged for it. If this was a mistake, fix the plant status directly or "
+                "delete the terminal event (e.g. the DIED / REMOVED event)."
+            )
         plant_id = plant.id
         if location_id is None and plant.location_id is not None:
             location_id = plant.location_id
