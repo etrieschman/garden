@@ -38,18 +38,67 @@ class SQLiteStorage:
 
     def init_schema(self) -> None:
         Base.metadata.create_all(self.engine)
-        self._ensure_recommendations_due_at()
+        self._ensure_columns()
+        self._backfill_terminal_at()
 
-    def _ensure_recommendations_due_at(self) -> None:
-        """One-shot inline migration: add recommendations.due_at if missing.
+    def _ensure_columns(self) -> None:
+        """Idempotent inline migrations: add columns to existing tables if missing.
 
         `Base.metadata.create_all` only creates tables; it never adds columns
-        to existing ones. Older sqlite files lack this column.
+        to existing ones. Each `(table, column, type)` here is safe to re-apply:
+        we skip the ALTER when the column already exists.
+        """
+        wanted: list[tuple[str, str, str]] = [
+            ("recommendations", "due_at", "TIMESTAMP"),
+            ("plants", "label", "VARCHAR"),
+            ("plants", "terminal_at", "TIMESTAMP"),
+            ("plants", "terminal_cause", "VARCHAR"),
+            ("events", "photo_path", "VARCHAR"),
+        ]
+        with self.engine.begin() as c:
+            for table, column, sqltype in wanted:
+                cols = c.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+                if not any(col[1] == column for col in cols):
+                    c.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {sqltype}")
+
+    def _backfill_terminal_at(self) -> None:
+        """Set `plants.terminal_at` for legacy DEAD/REMOVED plants from their
+        terminal event's `occurred_at`. Falls back to `created_at` if no event
+        is on record. Idempotent: skips plants that already have a value.
         """
         with self.engine.begin() as c:
-            cols = c.exec_driver_sql("PRAGMA table_info(recommendations)").fetchall()
-            if not any(col[1] == "due_at" for col in cols):
-                c.exec_driver_sql("ALTER TABLE recommendations ADD COLUMN due_at TIMESTAMP")
+            rows = c.exec_driver_sql(
+                "SELECT id, status, created_at FROM plants "
+                "WHERE terminal_at IS NULL AND status IN ('dead', 'removed')"
+            ).fetchall()
+            for plant_id, status, created_at in rows:
+                terminal_event_type = "died" if status == "dead" else "removed"
+                ev = c.exec_driver_sql(
+                    "SELECT occurred_at, details FROM events "
+                    "WHERE plant_id = ? AND type = ? "
+                    "ORDER BY occurred_at DESC LIMIT 1",
+                    (plant_id, terminal_event_type),
+                ).fetchone()
+                if ev is not None:
+                    occurred_at, details_json = ev
+                    cause: str | None = None
+                    if details_json:
+                        import json
+                        try:
+                            cause = json.loads(details_json).get("cause") or json.loads(
+                                details_json
+                            ).get("reason")
+                        except (ValueError, AttributeError):
+                            cause = None
+                    c.exec_driver_sql(
+                        "UPDATE plants SET terminal_at = ?, terminal_cause = ? WHERE id = ?",
+                        (occurred_at, cause, plant_id),
+                    )
+                else:
+                    c.exec_driver_sql(
+                        "UPDATE plants SET terminal_at = ? WHERE id = ?",
+                        (created_at, plant_id),
+                    )
 
     # ---- garden settings ----
     def get_garden(self) -> GardenMeta:
@@ -163,7 +212,16 @@ class SQLiteStorage:
             if not existing:
                 raise KeyError(f"plant not found: {plant.id}")
             fresh = PlantRow.from_domain(plant)
-            for col in ("taxon_id", "location_id", "status", "planted_at", "notes"):
+            for col in (
+                "taxon_id",
+                "location_id",
+                "status",
+                "label",
+                "planted_at",
+                "terminal_at",
+                "terminal_cause",
+                "notes",
+            ):
                 setattr(existing, col, getattr(fresh, col))
         return plant
 

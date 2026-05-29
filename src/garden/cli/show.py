@@ -23,7 +23,7 @@ def list_plants() -> None:
     ga = garden_app()
     plants = ga.storage.list_plants()
     if not plants:
-        console.print("[dim]no plants yet — `garden plant <taxon>`[/dim]")
+        console.print("[dim]no plants yet — `garden log seeded <taxon>`[/dim]")
         return
     t = Table(title="Plants")
     t.add_column("id")

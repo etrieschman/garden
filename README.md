@@ -80,13 +80,12 @@ uv run garden bed add patio-north --kind raised_bed --dim 240x120x30cm \
     --substrate "Coast of Maine raised bed mix"
 uv run garden bed list
 
-# Plants
-uv run garden plant "Garden Gem" --to patio-north
+# Plants — created via `garden log seeded` or `garden log transplanted`
 uv run garden list
 
 # Logging — `garden log <verb>` is registry-driven (see domain/event.py)
-uv run garden log transplant "Garden Gem" --to patio-north
-uv run garden log seed "Basil" --in patio-north
+uv run garden log transplanted "Garden Gem" --to patio-north
+uv run garden log seeded "Basil" --in patio-north
 uv run garden log watered gem --amount-l 2.0 --method base
 uv run garden log fertilized gem --type fish_emulsion --quantity 2 --unit tbsp
 uv run garden log amended patio-north --type cow_manure --quantity 1 --unit cu-ft

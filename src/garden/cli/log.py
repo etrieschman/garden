@@ -143,7 +143,7 @@ for _event_type, _model in EVENT_DETAILS.items():
 # ---------- creation verbs (special-cased because they create Plants) ----------
 
 
-@log_app.command("transplant")
+@log_app.command(EventType.TRANSPLANTED.value)
 def log_transplant(
     taxon_or_plant: Annotated[
         str, typer.Argument(help="Plant id (existing) or taxon name (new plant).")
@@ -281,7 +281,7 @@ def log_delete(
     console.print(f"[green]✓[/green] deleted {str(event.id)[:8]}")
 
 
-@log_app.command("seed")
+@log_app.command(EventType.SEEDED.value)
 def log_seed(
     taxon: Annotated[str, typer.Argument(help="Cultivar/species.")],
     where: Annotated[

@@ -294,7 +294,13 @@ def test_dead_plants_excluded_from_amendment_split() -> None:
 
     alive1 = Plant(id="a1", taxon_id="t1", location_id="bed", status=PlantStatus.TRANSPLANTED)
     alive2 = Plant(id="a2", taxon_id="t1", location_id="bed", status=PlantStatus.GROWING)
-    dead = Plant(id="d1", taxon_id="t1", location_id="bed", status=PlantStatus.DEAD)
+    dead = Plant(
+        id="d1",
+        taxon_id="t1",
+        location_id="bed",
+        status=PlantStatus.GROWING,
+        terminal_at=NOW,
+    )
     amend = Event(
         type=EventType.AMENDED,
         location_id="bed",

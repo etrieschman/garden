@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from garden.domain import TERMINAL_PLANT_STATUSES, Event, Recommendation
+from garden.domain import Event, Recommendation
 from garden.providers.weather import WeatherProvider, WeatherSample
 from garden.recommendations.base import GardenContext, RecommendationEngine
 from garden.storage.base import Storage
@@ -21,7 +21,7 @@ def build_context(
     now = now or datetime.now(UTC)
     # Terminal plants get no recommendations — filtering at the context layer
     # means every engine downstream sees only living plants.
-    plants = [p for p in storage.list_plants() if p.status not in TERMINAL_PLANT_STATUSES]
+    plants = [p for p in storage.list_plants() if p.is_alive]
     locations = {loc.id: loc for loc in storage.list_locations()}
     taxa = {t.id: t for t in storage.list_taxa()}
     obs_by_loc: dict[str, list] = {}

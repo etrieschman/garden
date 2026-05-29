@@ -140,7 +140,12 @@ class PlantRow(Base):
         ForeignKey("locations.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String)
+    label: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     planted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terminal_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    terminal_cause: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
@@ -150,7 +155,10 @@ class PlantRow(Base):
             taxon_id=self.taxon_id,
             location_id=self.location_id,
             status=PlantStatus(self.status),
+            label=self.label,
             planted_at=_utc(self.planted_at),
+            terminal_at=_utc(self.terminal_at),
+            terminal_cause=self.terminal_cause,
             notes=self.notes,
             created_at=_utc(self.created_at),
         )
@@ -162,7 +170,10 @@ class PlantRow(Base):
             taxon_id=p.taxon_id,
             location_id=p.location_id,
             status=p.status.value,
+            label=p.label,
             planted_at=p.planted_at,
+            terminal_at=p.terminal_at,
+            terminal_cause=p.terminal_cause,
             notes=p.notes,
             created_at=p.created_at,
         )
@@ -183,6 +194,7 @@ class EventRow(Base):
         ForeignKey("locations.id"), nullable=True
     )
     details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    photo_path: Mapped[str | None] = mapped_column(String, nullable=True)
     actor: Mapped[str] = mapped_column(String)
     source: Mapped[str] = mapped_column(String)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -196,6 +208,7 @@ class EventRow(Base):
             location_id=self.location_id,
             from_location_id=self.from_location_id,
             details=self.details or {},
+            photo_path=self.photo_path,
             actor=self.actor,
             source=self.source,
             notes=self.notes,
@@ -211,6 +224,7 @@ class EventRow(Base):
             location_id=e.location_id,
             from_location_id=e.from_location_id,
             details=e.details,
+            photo_path=e.photo_path,
             actor=e.actor,
             source=e.source,
             notes=e.notes,

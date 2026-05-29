@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 
 from garden.domain import (
     INDOOR_LOCATION_KINDS,
-    TERMINAL_PLANT_STATUSES,
     EventType,
     LocationKind,
     Observation,
@@ -115,7 +114,7 @@ def _living_plants_in_bed(ctx: GardenContext, location_id: str) -> int:
     return sum(
         1
         for p in ctx.plants
-        if p.location_id == location_id and p.status not in TERMINAL_PLANT_STATUSES
+        if p.location_id == location_id and p.is_alive
     )
 
 

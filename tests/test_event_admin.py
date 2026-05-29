@@ -53,7 +53,9 @@ def test_find_events_by_prefix_and_delete(storage: SQLiteStorage) -> None:
 
 
 def test_terminal_plants_excluded_from_recommend_context(storage: SQLiteStorage) -> None:
-    """Both DEAD and REMOVED are terminal — recommend should see neither."""
+    """`terminal_at != None` makes a plant invisible to the recommend pipeline."""
+    from datetime import UTC, datetime
+
     from garden.services.recommend import build_context
 
     bed = _bed(storage)
@@ -64,10 +66,14 @@ def test_terminal_plants_excluded_from_recommend_context(storage: SQLiteStorage)
         Plant(id="alive", taxon_id=taxon.id, location_id=bed.id, status=PlantStatus.GROWING)
     )
     storage.create_plant(
-        Plant(id="dead", taxon_id=taxon.id, location_id=bed.id, status=PlantStatus.DEAD)
-    )
-    storage.create_plant(
-        Plant(id="removed", taxon_id=taxon.id, location_id=bed.id, status=PlantStatus.REMOVED)
+        Plant(
+            id="dead",
+            taxon_id=taxon.id,
+            location_id=bed.id,
+            status=PlantStatus.GROWING,
+            terminal_at=datetime.now(UTC),
+            terminal_cause="frost",
+        )
     )
 
     ctx = build_context(storage)
@@ -75,19 +81,21 @@ def test_terminal_plants_excluded_from_recommend_context(storage: SQLiteStorage)
 
 
 @pytest.mark.parametrize(
-    ("terminal_event", "expected_status"),
+    ("terminal_event", "details", "expected_cause"),
     [
-        (EventType.DIED, PlantStatus.DEAD),
-        (EventType.REMOVED, PlantStatus.REMOVED),
+        (EventType.DIED, {"cause": "frost"}, "frost"),
+        (EventType.REMOVED, {"reason": "end of season"}, "end of season"),
+        (EventType.DIED, {}, None),
     ],
 )
-def test_terminal_plant_refuses_further_events(
+def test_terminal_event_marks_plant_and_refuses_further_events(
     storage: SQLiteStorage,
     terminal_event: EventType,
-    expected_status: PlantStatus,
+    details: dict[str, object],
+    expected_cause: str | None,
 ) -> None:
-    """Once a plant hits a terminal state (dead or removed), the logging service
-    refuses any subsequent event for it — both go through the same guard."""
+    """A DIED/REMOVED event sets terminal_at + terminal_cause; further events
+    on that plant raise. Both verbs go through the same EVENT_EFFECTS entry."""
     bed = _bed(storage)
     taxon = storage.upsert_taxon(
         Taxon(id="t1", scientific_name="Solanum lycopersicum", common_name="tomato")
@@ -96,10 +104,18 @@ def test_terminal_plant_refuses_further_events(
         Plant(id="p1", taxon_id=taxon.id, location_id=bed.id, status=PlantStatus.GROWING)
     )
 
-    logging_svc.log_event(storage, plant_query=plant.id, type=terminal_event)
-    assert storage.get_plant(plant.id).status == expected_status
+    logging_svc.log_event(
+        storage, plant_query=plant.id, type=terminal_event, details=details
+    )
 
-    with pytest.raises(ValueError, match=expected_status.value):
+    refreshed = storage.get_plant(plant.id)
+    assert refreshed is not None
+    assert refreshed.terminal_at is not None
+    assert refreshed.terminal_cause == expected_cause
+    # lifecycle status is preserved — DIED/REMOVED no longer overwrite it
+    assert refreshed.status == PlantStatus.GROWING
+
+    with pytest.raises(ValueError, match="terminal"):
         logging_svc.log_event(storage, plant_query=plant.id, type=EventType.WATERED)
 
     types = [e.type for e in storage.list_events(plant_id=plant.id)]

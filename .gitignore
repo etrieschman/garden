@@ -14,6 +14,7 @@ htmlcov/
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite.backup-*
 
 # One-time yaml migration breadcrumb (created on first run after the v0.2 refactor)
 *.yaml.migrated

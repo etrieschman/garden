@@ -16,7 +16,7 @@ import pandas as pd
 import plotly.express as px
 
 from garden.app import GardenApp
-from garden.domain import INDOOR_LOCATION_KINDS, TERMINAL_PLANT_STATUSES
+from garden.domain import INDOOR_LOCATION_KINDS
 
 INSTANCE_DIR = Path("garden-data").resolve()
 ga = GardenApp.open(INSTANCE_DIR)
@@ -58,7 +58,7 @@ those growing outside.
 ```{python}
 taxa = {t.id: t for t in ga.storage.list_taxa()}
 locations_by_id = {loc.id: loc for loc in locations}
-alive_plants = [p for p in plants if p.status not in TERMINAL_PLANT_STATUSES]
+alive_plants = [p for p in plants if p.is_alive]
 
 
 def _is_indoor(plant):

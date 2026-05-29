@@ -20,6 +20,13 @@ INDOOR_LOCATION_KINDS = frozenset({LocationKind.INDOOR, LocationKind.SEED_TRAY})
 
 
 class PlantStatus(StrEnum):
+    """Lifecycle phase of a plant.
+
+    "Is this plant still in the garden?" is answered by `Plant.terminal_at is None`,
+    NOT by checking against any status value here. `DEAD` and `REMOVED` exist for
+    legacy rows that predate the `terminal_at` column.
+    """
+
     SEEDED = "seeded"
     GERMINATED = "germinated"
     TRANSPLANTED = "transplanted"
@@ -28,17 +35,8 @@ class PlantStatus(StrEnum):
     FRUITING = "fruiting"
     HARVESTED = "harvested"
     DORMANT = "dormant"
-    DEAD = "dead"
-    REMOVED = "removed"
-
-
-# Terminal plant statuses — plants in one of these are no longer in the
-# garden. They get no recommendations, refuse new events, and are hidden
-# from current-state views (plants table, growth-stage tracker, …). Treat
-# this as the single source of truth: prefer `p.status in TERMINAL_PLANT_STATUSES`
-# over checking PlantStatus.DEAD directly, so adding a new terminal state later
-# is a one-line change.
-TERMINAL_PLANT_STATUSES = frozenset({PlantStatus.DEAD, PlantStatus.REMOVED})
+    DEAD = "dead"  # legacy — read terminal_at instead
+    REMOVED = "removed"  # legacy — read terminal_at instead
 
 
 class AmendmentUnit(StrEnum):

@@ -13,13 +13,14 @@ No CLI code changes needed.
 bespoke CLI commands because they also create a Plant.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from garden.domain.enums import AmendmentUnit, EventType
+from garden.domain.enums import AmendmentUnit, EventType, PlantStatus
 
 # ---------- the Event row itself ----------
 
@@ -37,6 +38,7 @@ class Event(BaseModel):
     location_id: str | None = None
     from_location_id: str | None = None  # transplants: source
     details: dict[str, Any] = Field(default_factory=dict)
+    photo_path: str | None = None
     actor: str = "manual:user"
     source: str = "cli"
     notes: str | None = None
@@ -135,4 +137,36 @@ EVENT_DETAILS: dict[EventType, type[BaseModel]] = {
     EventType.DIED: DiedDetails,
     EventType.REMOVED: RemovedDetails,
     EventType.OBSERVED: ObservedDetails,
+}
+
+
+# ---------- what each event does to a plant ----------
+
+
+@dataclass(frozen=True)
+class PlantEffect:
+    """How an event affects the plant it targets.
+
+    `lifecycle`: advance the plant's status to this phase, if set.
+    `terminal`:  mark the plant as terminal (sets `terminal_at` to the event's
+                 `occurred_at`; `terminal_cause` is read from `details[cause_field]`
+                 if `cause_field` is provided).
+
+    A single registry — `EVENT_EFFECTS` below — is the source of truth for
+    every "what happens to the plant when this event fires?" question. Don't
+    encode this anywhere else.
+    """
+
+    lifecycle: PlantStatus | None = None
+    terminal: bool = False
+    cause_field: str | None = None
+
+
+EVENT_EFFECTS: dict[EventType, PlantEffect] = {
+    EventType.SEEDED: PlantEffect(lifecycle=PlantStatus.SEEDED),
+    EventType.GERMINATED: PlantEffect(lifecycle=PlantStatus.GERMINATED),
+    EventType.TRANSPLANTED: PlantEffect(lifecycle=PlantStatus.TRANSPLANTED),
+    EventType.HARVESTED: PlantEffect(lifecycle=PlantStatus.HARVESTED),
+    EventType.DIED: PlantEffect(terminal=True, cause_field="cause"),
+    EventType.REMOVED: PlantEffect(terminal=True, cause_field="reason"),
 }
